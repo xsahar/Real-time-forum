@@ -2,7 +2,8 @@ package forum
 import (
 	"net/http"
 	"log"
-	s "forum/src/structs"
+//  t "Real-time-forum/src/database"
+    s "Real-time-forum/src/structs"
 )
 func RecoveryHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

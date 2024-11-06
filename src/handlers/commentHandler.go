@@ -3,8 +3,8 @@ package forum
 import (
 	"database/sql"
 	"fmt"
-	t "forum/src/database"
-	s "forum/src/structs"
+	 t "Real-time-forum/src/database"
+    s "Real-time-forum/src/structs"
 	"log"
 	"net/http"
 	"strconv"

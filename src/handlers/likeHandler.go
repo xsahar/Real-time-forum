@@ -2,7 +2,8 @@ package forum
 
 import (
 	"database/sql"
-	t "forum/src/database"
+ t "Real-time-forum/src/database"
+    // s "Real-time-forum/src/structs"
 	"log"
 	"net/http"
 	"strconv"

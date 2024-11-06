@@ -1,0 +1,19 @@
+- HTML:
+`main-content`: element in your `index.html` file acts as the container for the dynamic content generated and managed by JavaScript in your SPA, providing a central area for displaying different sections of your application without needing to navigate to separate pages.
+
+`#` symbol:
+
+- In the provided HTML code, the `#` symbol in the anchor `<a>` tags' `href` attributes acts as a placeholder or "hash" symbol.
+- It is used to create anchor links within the same page in a Single Page Application (SPA).
+- Clicking on links with `href="#"` triggers JavaScript event listeners to dynamically load content without reloading the entire page.
+- The `#` symbol indicates that the link's action is internal to the current page, facilitating a seamless user experience within a single page layout.
+
+- async:
+    
+    `document.getElementById('home-link').addEventListener('click', async (e) => {}`
+    
+    Summary: The `async` keyword in the event listener function allows for asynchronous operations to be handled without blocking the main execution thread. This is useful for tasks like fetching data from the server or processing real-time messages in the real-time forum project, ensuring the application remains responsive while handling these operations.
+
+- e.preventDefault( );
+    
+    By using `e.preventDefault()` in your event listeners, you are effectively preventing the default behavior of anchor tags, which includes navigating to a new page or reloading the current page. This allows you to handle the link click event using custom JavaScript logic without triggering a page reload.

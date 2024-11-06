@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"strings"
 	"log"
-	h "forum/src/structs"
+	h "Real-time-forum/src/structs"
 )
 
 func init() {

@@ -1,0 +1,24 @@
+### **Steps to Convert Each Page:**
+
+1. **Remove Server-Side Template Logic**:
+    - Remove any server-side template logic (e.g., `{{if .LoggedIn}}`, `{{else}}`, `{{end}}`, `{{range .Categories}}`, `{{range .Posts}}`).
+2. **Use Placeholders**:
+    - Use placeholders or comments to indicate where dynamic content will be inserted.
+3. **Store Template in JavaScript Object**:
+    - Store the HTML template in a JavaScript object for easy access.
+4. **Implement JavaScript Logic**:
+    - Implement JavaScript logic to dynamically insert content based on the user's login status and other dynamic data.
+5. **Check User Login Status**:
+    - Implement a function to check if the user is logged in.
+6. **Update Navigation Links**:
+    - Dynamically update the navigation links based on the user's login status.
+7. **Load Dynamic Content**:
+    - Fetch dynamic content (e.g., categories, posts, user data) from the server and insert it into the DOM.
+8. **Attach Event Listeners**:
+    - Attach event listeners to navigation links, forms, and other interactive elements.
+9. **Handle Form Submissions**:
+    - Implement functions to handle form submissions, send data to the server using the Fetch API, and process the server's response.
+10. **Handle URL Parameters**:
+    - Implement a function to handle URL parameters for filtering or other purposes.
+11. **Initialize the Application**:
+    - Load the initial template and content when the page loads.
