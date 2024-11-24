@@ -35,9 +35,6 @@ graph TD
     E -->|Return| F[Response]
 ```
 
-GitHub Copilot
-Let me organize the documentation across the existing folder structure with clear separation of concerns.
-
 Plan:
 
 API documentation in Features

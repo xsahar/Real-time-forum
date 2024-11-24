@@ -21,7 +21,7 @@ graph TD
     B <-->|Real-time| E
     C <-->|HTTP| D
     D & E --> F
-```
+
 ### Features
 - User authentication (register/login)
 - Posts with categories
