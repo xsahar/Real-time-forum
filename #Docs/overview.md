@@ -20,7 +20,7 @@ graph TD
     REST --> MW --> API
     WS --> WSH
     API & WSH --> DB
-
+```
 
 ### Core Components
 1. Frontend (SPA)
