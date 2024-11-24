@@ -1,1 +1,0 @@
-//Initializes the application and loads the initial template.

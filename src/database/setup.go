@@ -1,24 +1,39 @@
-package forum
+
+package database
 
 import (
-	"html/template"
-	"strings"
-	"log"
-	h "Real-time-forum/src/structs"
+    "database/sql"
+    "fmt"
+    _ "github.com/mattn/go-sqlite3"
 )
 
-func init() {
-	InitDB()
+var DB *sql.DB
 
-	funcMap := template.FuncMap{
-		"nl2br": func(text string) template.HTML {
-			return template.HTML(strings.Replace(template.HTMLEscapeString(text), "\n", "<br>", -1))
-		},
-	}
+// InitDB initializes database connection
+func InitDB() error {
+    var err error
+    DB, err = sql.Open("sqlite3", "./forum.db")
+    if err != nil {
+        return fmt.Errorf("failed to open database: %v", err)
+    }
 
-	var err error
-	h.Tpl, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
-	if err != nil {
-		log.Fatalf("Error parsing templates: %v", err)
-	}
+    // Test connection
+    if err = DB.Ping(); err != nil {
+        return fmt.Errorf("failed to ping database: %v", err)
+    }
+
+    // Initialize schema
+    if err = CreateTables(); err != nil {
+        return fmt.Errorf("failed to create tables: %v", err)
+    }
+
+    return nil
+}
+
+// CloseDB closes database connection
+func CloseDB() error {
+    if DB != nil {
+        return DB.Close()
+    }
+    return nil
 }

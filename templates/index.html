@@ -3,38 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forum</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    <link rel="stylesheet" href="/static/styles.css">
+    <title>Real-time Forum</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/components/posts.css">
+    <link rel="stylesheet" href="/static/css/components/forms.css">
+    <link rel="stylesheet" href="/static/css/components/chat.css">
 </head>
 <body>
-    <header>
-        <nav>
-            <div class="logo">Forum</div>
-            <ul>
-                <li><a href="#" id="home-link"><i class="fas fa-home"></i> Home</a></li>
-                <li><a href="#" id="register-link"><i class="fas fa-user-plus"></i> Register</a></li>
-                <li><a href="#" id="login-link"><i class="fas fa-sign-in-alt"></i> Login</a></li>
-                <li><a href="#" id="new-post-link"><i class="fas fa-edit"></i> New Post</a></li>
-                <!-- <li><button id="logout-button">Logout</button></li> -->
-            </ul>
-        </nav>
-    </header>
+    <!-- Navigation initially hidden -->
+    <nav class="main-nav" style="display: none;">
+        <div class="nav-left">
+            <a href="/" class="nav-link" data-link>Home</a>
+            <a href="/new-post" class="nav-link" data-link>New Post</a>
+        </div>
+        <div class="nav-right">
+            <button id="logout-btn">Logout</button>
+        </div>
+    </nav>
 
-    <main id="main-content" class="container">
-        <ul id="categories-list"></ul>
+    <main id="app">
+        <!-- Single auth container for login/register -->
+        <div id="auth-container" class="auth-container">
+            <!-- Login form initially visible -->
+            <div class="auth-form">
+                <h2>Login</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <input type="text" name="identifier" placeholder="Email or Nickname" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="password" name="password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="submit-btn">Login</button>
+                    <p class="auth-switch">
+                        No account? <a href="#" id="show-register">Register</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Content containers initially hidden -->
+        <div id="content" style="display: none;">
+            <div id="posts-container"></div>
+            <div id="chat-container">
+                <div class="chat-users">
+                    <h3>Online Users</h3>
+                    <div id="online-users"></div>
+                </div>
+                <div class="chat-messages">
+                    <div id="message-list"></div>
+                    <form id="message-form">
+                        <input type="text" placeholder="Type a message...">
+                        <button type="submit">Send</button>
+                    </form>
+                </div>
+            </div>
+        </div>
     </main>
 
-    <footer>
-        <p>&copy; 2024 Forum. All rights reserved.</p>
-    </footer>
-
-    <script src="/static/templates.js"></script>
-    <script src="/static/events.js"></script>
-    <script src="/static/forms.js"></script>
-    <script src="/static/utils.js"></script>
-    <script src="/static/app.js"></script>
-    <script src="/static/fetch.js"></script>
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

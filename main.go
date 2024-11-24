@@ -1,48 +1,80 @@
 package main
 
 import (
-    "fmt"
-    h "Real-time-forum/src/handlers"
     "log"
     "net/http"
     "os"
+    "strings"
+
+    "Real-time-forum/src/database"
+    "Real-time-forum/src/handlers/auth"
+    "Real-time-forum/src/handlers/categories"
+    "Real-time-forum/src/handlers/core"
+    "Real-time-forum/src/handlers/posts"
+    "Real-time-forum/src/middleware"
 
     _ "github.com/mattn/go-sqlite3"
 )
 
-func main() {
-    // Serve the index.html for the main route and other relevant routes
-    
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        if r.URL.Path == "/" || r.URL.Path == "/login" || r.URL.Path == "/register" || r.URL.Path == "/new-post" {
-            http.ServeFile(w, r, "templates/index.html")
-            return
-        }
-        h.NotFoundHandler(w)
-    })
+func setupRoutes() {
+    // API routes with middleware configuration
+    apiRoutes := []struct {
+        path         string
+        handler      http.HandlerFunc
+        useRateLimit bool
+    }{
+        {"/api/posts", posts.ListPostsHandler, false},      // List all posts
+        {"/api/post/{id}", posts.GetPostHandler, false},    // Get single post
+        {"/api/login", auth.LoginHandler, false},
+        {"/api/register", auth.RegisterHandler, false},
+        {"/api/logout", auth.LogoutHandler, false},
+        {"/api/create-post", posts.CreatePostHandler, false},
+        {"/api/post/{id}/comment", posts.PostAndCommentHandler, false},
+        {"/api/like/{id}", posts.LikeHandler, true},        
+        {"/api/dislike/{id}", posts.DislikeHandler, true},  
+        {"/api/categories", categories.CategoriesHandler, false},
+        {"/api/add-category", categories.AddCategoryHandler, false},
+    }
 
-    // API endpoints
-    http.HandleFunc("/api/login", h.RecoveryHandler(h.LoginHandler))
-    http.HandleFunc("/api/register", h.RecoveryHandler(h.RegisterHandler))
-    http.HandleFunc("/api/logout", h.RecoveryHandler(h.LogoutHandler))
-    http.HandleFunc("/api/create-post", h.RecoveryHandler(h.CreatePostHandler))
-    http.HandleFunc("/api/post/", h.RecoveryHandler(h.PostAndCommentHandler))
-    http.HandleFunc("/api/like/", h.RecoveryHandler(h.LikeHandler))
-    http.HandleFunc("/api/dislike/", h.RecoveryHandler(h.DislikeHandler))
-    http.HandleFunc("/api/new-post", h.RecoveryHandler(h.CreatePostHandler))
-    http.HandleFunc("/api/categories", h.RecoveryHandler(h.CategoriesHandler))
-    http.HandleFunc("/api/add-category", h.RecoveryHandler(h.AddCategoryHandler))
+    // Register API routes with middleware
+    for _, route := range apiRoutes {
+        handler := core.RecoveryHandler(route.handler)
+        if route.useRateLimit {
+            handler = middleware.RateLimit(handler)
+        }
+        http.HandleFunc(route.path, handler)
+    }
+
+    // SPA route - serve index.html for non-API routes
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        if !strings.HasPrefix(r.URL.Path, "/api/") {
+            http.ServeFile(w, r, "templates/index.html")
+        }
+    })
 
     // Serve static files
     fs := http.FileServer(http.Dir("static"))
     http.Handle("/static/", http.StripPrefix("/static/", fs))
+}
 
+func main() {
+    // Initialize database
+    if err := database.InitDB(); err != nil {
+        log.Fatal("Database initialization failed:", err)
+    }
+    defer database.DB.Close()
+
+    // Setup routes
+    setupRoutes()
+
+    // Start server
     port := os.Getenv("PORT")
     if port == "" {
         port = "8000"
     }
 
-    message := fmt.Sprintf("Server started at http://localhost:%s/\n", port)
-    log.Print(message)
-    log.Fatal(http.ListenAndServe(":"+port, nil))
+    log.Printf("Server starting on http://localhost:%s\n", port)
+    if err := http.ListenAndServe(":"+port, nil); err != nil {
+        log.Fatal("Server failed to start:", err)
+    }
 }
