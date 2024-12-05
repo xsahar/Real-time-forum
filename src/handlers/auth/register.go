@@ -1,25 +1,34 @@
 package auth
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"time"
+    // "bytes"
+    "encoding/json"
+    "fmt"
+    // "io"
+    "log"
+    "net/http"
+    "strings"
+    "time"
 
-	"Real-time-forum/src/database"
-	"Real-time-forum/src/models"
+    "Real-time-forum/src/database"
+    "Real-time-forum/src/models"
 
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+    "github.com/google/uuid"
+    "golang.org/x/crypto/bcrypt"
 )
 
+// Helper function for safe logging
+func sanitizeUserDataForLog(user models.User) models.User {
+    sanitized := user
+    sanitized.Password = "[REDACTED]"
+    return sanitized
+}
+
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
 
-	w.Header().Set("Content-Type", "application/json")
-
-      if r.Method != http.MethodPost {
+    if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
-        log.Printf("Invalid method %s", r.Method)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
             Error:  "Method not allowed",
@@ -27,37 +36,36 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Read and log request body
+    // Decode request body
     var user models.User
     if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
         log.Printf("Failed to decode request body: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
-            Error:  "Invalid request body",
+            Error:  "Invalid JSON format",
         })
         return
     }
 
-		log.Printf("Received user data: %+v", user)
+    // Single log with sanitized data
+    log.Printf("Processing registration request: %+v", sanitizeUserDataForLog(user))
 
-    // Validate all required fields
-    if user.Email == "" || user.Password == "" || user.Nickname == "" || 
-       user.FirstName == "" || user.LastName == "" || user.Gender == "" || 
-       user.Age < 13 {
-        log.Printf("Missing or invalid fields: %+v", user)
+    // Validate required fields
+    if err := validateUserData(&user); err != nil {
+        log.Printf("Validation failed: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
-            Error:  "Missing required fields",
+            Error:  err.Error(),
         })
         return
     }
 
-    // Hash password
-    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+    // Check if user exists
+    exists, err := checkUserExists(user.Email, user.Nickname)
     if err != nil {
-        w.Header().Set("Content-Type", "application/json")
+        log.Printf("Database error checking user existence: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -65,11 +73,31 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         })
         return
     }
+    if exists {
+        w.WriteHeader(http.StatusConflict)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "User with this email or nickname already exists",
+        })
+        return
+    }
 
-    // Begin transaction
+    // Hash password
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+    if err != nil {
+        log.Printf("Password hashing failed: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Failed to process registration",
+        })
+        return
+    }
+
+    // Begin transaction for user creation
     tx, err := database.DB.Begin()
     if err != nil {
-        w.Header().Set("Content-Type", "application/json")
+        log.Printf("Failed to begin transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -79,14 +107,28 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
-    // Insert user
+    // Insert user (let SQLite handle timestamp)
     result, err := tx.Exec(`
-        INSERT INTO users (email, nickname, password, age, gender, first_name, last_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        user.Email, user.Nickname, hashedPassword, user.Age, user.Gender, user.FirstName, user.LastName)
-    
+        INSERT INTO users (
+            email, 
+            nickname, 
+            password, 
+            age, 
+            gender, 
+            first_name, 
+            last_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        user.Email,
+        user.Nickname,
+        hashedPassword,
+        user.Age,
+        user.Gender,
+        user.FirstName,
+        user.LastName,
+    )
+
     if err != nil {
-        w.Header().Set("Content-Type", "application/json")
+        log.Printf("Failed to insert user: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -95,16 +137,27 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    userID, _ := result.LastInsertId()
-    sessionToken := uuid.NewString()
+    userID, err := result.LastInsertId()
+    if err != nil {
+        log.Printf("Failed to get user ID: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Failed to create user",
+        })
+        return
+    }
 
     // Create session
+    sessionToken := uuid.NewString()
+    expiresAt := time.Now().Add(24 * time.Hour)
+
     _, err = tx.Exec(
         "INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)",
-        userID, sessionToken, time.Now().Add(24*time.Hour))
-    
+        userID, sessionToken, expiresAt)
+
     if err != nil {
-        w.Header().Set("Content-Type", "application/json")
+        log.Printf("Failed to create session: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -113,12 +166,13 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Commit transaction
     if err = tx.Commit(); err != nil {
-        w.Header().Set("Content-Type", "application/json")
+        log.Printf("Failed to commit transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
-            Error:  "Transaction failed",
+            Error:  "Failed to complete registration",
         })
         return
     }
@@ -127,14 +181,55 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
     http.SetCookie(w, &http.Cookie{
         Name:     "session_token",
         Value:    sessionToken,
-        Expires:  time.Now().Add(24 * time.Hour),
+        Expires:  expiresAt,
         HttpOnly: true,
+        Path:     "/",
+        SameSite: http.SameSiteStrictMode,
     })
 
-    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusCreated)
     json.NewEncoder(w).Encode(AuthResponse{
         Status:  "success",
         Message: "Registration successful",
     })
+}
+
+func validateUserData(user *models.User) error {
+    var missingFields []string
+
+    if user.Email == "" || !strings.Contains(user.Email, "@") {
+        missingFields = append(missingFields, "valid email")
+    }
+    if len(user.Password) < 6 {
+        missingFields = append(missingFields, "password (min 6 characters)")
+    }
+    if len(user.Nickname) < 3 {
+        missingFields = append(missingFields, "nickname (min 3 characters)")
+    }
+    if user.FirstName == "" {
+        missingFields = append(missingFields, "firstName")
+    }
+    if user.LastName == "" {
+        missingFields = append(missingFields, "lastName")
+    }
+    if user.Gender == "" {
+        missingFields = append(missingFields, "gender")
+    }
+    if user.Age < 13 {
+        missingFields = append(missingFields, "age (must be 13 or older)")
+    }
+
+    if len(missingFields) > 0 {
+        return fmt.Errorf("missing or invalid fields: %s", strings.Join(missingFields, ", "))
+    }
+    return nil
+}
+
+func checkUserExists(email, nickname string) (bool, error) {
+    var exists bool
+    err := database.DB.QueryRow(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE email = ? OR nickname = ?)",
+        email, nickname,
+    ).Scan(&exists)
+    return exists, err
 }

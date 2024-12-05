@@ -1,4 +1,4 @@
-// static/js/components/users/BaseForm.js
+
 export class BaseForm {
     constructor(container, onSubmit, onSwitchForm) {
         this.container = container;

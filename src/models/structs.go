@@ -7,12 +7,12 @@ type User struct {
     Email     string    `json:"email"`
     // UserID    int       `json:"user_id"` 
     Nickname  string    `json:"nickname"`
-    Password  string    `json:"-"`
+    Password  string    `json:"password"`
     Age       int       `json:"age"`
     Gender    string    `json:"gender"`
-    FirstName string    `json:"firstName"`
-    LastName  string    `json:"lastName"`
-    CreatedAt time.Time `json:"created_at"`
+    FirstName string    `json:"firstName"` 
+    LastName  string    `json:"lastName"` 
+    CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
 type Post struct {

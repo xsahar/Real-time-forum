@@ -2,14 +2,21 @@ package auth
 
 import (
     "encoding/json"
+    "log"
     "net/http"
     "time"
 
-		"Real-time-forum/src/models" 
-		"Real-time-forum/src/database"
+    "Real-time-forum/src/models"
+    "Real-time-forum/src/database"
+    
     "github.com/google/uuid"
     "golang.org/x/crypto/bcrypt"
 )
+
+type LoginCredentials struct {
+    Identifier string `json:"identifier"`
+    Password   string `json:"password"`
+}
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
@@ -23,16 +30,23 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    var creds struct {
-        Identifier    string `json:"identifier"`
-        Password string `json:"password"`
-    }
-
+    var creds LoginCredentials
     if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+        log.Printf("Failed to decode login request: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
-            Error:  "Invalid request body",
+            Error:  "Invalid request format",
+        })
+        return
+    }
+
+    // Validate credentials
+    if creds.Identifier == "" || creds.Password == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Identifier and password are required",
         })
         return
     }
@@ -44,7 +58,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         creds.Identifier, creds.Identifier,
     ).Scan(&user.ID, &user.Password)
 
-    if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)) != nil {
+    if err != nil {
+        log.Printf("User not found: %v", err)
         w.WriteHeader(http.StatusUnauthorized)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -53,17 +68,52 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-     // Generate token
-     sessionToken := uuid.NewString()
+    // Verify password
+    if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)); err != nil {
+        log.Printf("Password verification failed: %v", err)
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Invalid credentials",
+        })
+        return
+    }
 
-     // Create session with expiry
-     expiresAt := time.Now().Add(24 * time.Hour)
-     _, err = database.DB.Exec(
-         "INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)",
-         user.ID, sessionToken, expiresAt,
-     )
-
+    // Start transaction for session management
+    tx, err := database.DB.Begin()
     if err != nil {
+        log.Printf("Failed to begin transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Internal server error",
+        })
+        return
+    }
+    defer tx.Rollback()
+
+    // Clear existing sessions for user
+    _, err = tx.Exec("DELETE FROM sessions WHERE user_id = ?", user.ID)
+    if err != nil {
+        log.Printf("Failed to clear existing sessions: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Session management failed",
+        })
+        return
+    }
+
+    // Create new session
+    sessionToken := uuid.NewString()
+    expiresAt := time.Now().Add(24 * time.Hour)
+    
+    _, err = tx.Exec(
+        "INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)",
+        user.ID, sessionToken, expiresAt,
+    )
+    if err != nil {
+        log.Printf("Failed to create session: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -72,27 +122,36 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-     // Return success with token
-     w.WriteHeader(http.StatusOK)
-     json.NewEncoder(w).Encode(AuthResponse{
-         Status: "success",
-         Message: "Login successful",
-         Data: map[string]string{
-             "token": sessionToken,
-         },
-     })
+    // Commit transaction
+    if err = tx.Commit(); err != nil {
+        log.Printf("Failed to commit transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(AuthResponse{
+            Status: "error",
+            Error:  "Session commitment failed",
+        })
+        return
+    }
 
     // Set session cookie
     http.SetCookie(w, &http.Cookie{
         Name:     "session_token",
         Value:    sessionToken,
-        Expires:  time.Now().Add(24 * time.Hour),
+        Expires:  expiresAt,
         HttpOnly: true,
+        Path:     "/",
+        SameSite: http.SameSiteStrictMode,
     })
 
+    // Single response with token
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(AuthResponse{
         Status:  "success",
         Message: "Login successful",
+        Data: map[string]string{
+            "token": sessionToken,
+        },
     })
 }
+
+// Removed duplicate LogoutHandler function

@@ -97,6 +97,14 @@ func CreateTables() error {
         FOREIGN KEY (to_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
         `CREATE INDEX IF NOT EXISTS idx_messages_from_to ON messages(from_id, to_id)`,
+
+        `CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) 
+            )`,
     }
 
     for _, query := range queries {
