@@ -1,18 +1,13 @@
 package ws
 
-// import (
-// 	"sync"
-// 	"time"
-// )
-
-
 // NewHub creates a new hub instance
 func NewHub() *Hub {
     return &Hub{
-        Clients:    make(map[*Client]bool),     // Empty map for new clients
-        Broadcast:  make(chan Message),         // Channel for messages
-        Register:   make(chan *Client),         // Channel for new connections
-        Unregister: make(chan *Client),         // Channel for disconnections
+        Clients:     make(map[*Client]bool),
+        Broadcast:   make(chan Message),
+        Register:    make(chan *Client),
+        Unregister: make(chan *Client),
+        OnlineUsers: make(map[int]string),
     }
 }
 

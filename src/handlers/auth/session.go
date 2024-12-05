@@ -9,15 +9,32 @@ import (
 )
 
 func ValidateSession(w http.ResponseWriter, r *http.Request) (int, bool) {
-    cookie, err := r.Cookie("session_token")
-    if err != nil {
+    // Check Authorization header first
+    authHeader := r.Header.Get("Authorization")
+    var token string
+    
+    if authHeader != "" {
+        // Extract token from Bearer format
+        if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+            token = authHeader[7:]
+        }
+    } else {
+        // Fallback to cookie
+        cookie, err := r.Cookie("session_token")
+        if err != nil {
+            return 0, false
+        }
+        token = cookie.Value
+    }
+
+    if token == "" {
         return 0, false
     }
 
     var userID int
-    err = database.DB.QueryRow(
+    err := database.DB.QueryRow(
         "SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?",
-        cookie.Value, time.Now(),
+        token, time.Now(),
     ).Scan(&userID)
 
     if err != nil {

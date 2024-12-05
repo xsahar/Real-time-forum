@@ -24,7 +24,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     var creds struct {
-        Login    string `json:"login"`
+        Identifier    string `json:"identifier"`
         Password string `json:"password"`
     }
 
@@ -41,7 +41,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
     var user models.User
     err := database.DB.QueryRow(
         "SELECT id, password FROM users WHERE email = ? OR nickname = ?",
-        creds.Login, creds.Login,
+        creds.Identifier, creds.Identifier,
     ).Scan(&user.ID, &user.Password)
 
     if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)) != nil {
@@ -53,12 +53,15 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create session
-    sessionToken := uuid.NewString()
-    _, err = database.DB.Exec(
-        "INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)",
-        user.ID, sessionToken, time.Now().Add(24*time.Hour),
-    )
+     // Generate token
+     sessionToken := uuid.NewString()
+
+     // Create session with expiry
+     expiresAt := time.Now().Add(24 * time.Hour)
+     _, err = database.DB.Exec(
+         "INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)",
+         user.ID, sessionToken, expiresAt,
+     )
 
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
@@ -68,6 +71,16 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         })
         return
     }
+
+     // Return success with token
+     w.WriteHeader(http.StatusOK)
+     json.NewEncoder(w).Encode(AuthResponse{
+         Status: "success",
+         Message: "Login successful",
+         Data: map[string]string{
+             "token": sessionToken,
+         },
+     })
 
     // Set session cookie
     http.SetCookie(w, &http.Cookie{

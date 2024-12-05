@@ -5,33 +5,34 @@ import "time"
 type User struct {
     ID        int       `json:"id"`
     Email     string    `json:"email"`
+    // UserID    int       `json:"user_id"` 
     Nickname  string    `json:"nickname"`
-    Password  string    `json:"password"` 
+    Password  string    `json:"-"`
     Age       int       `json:"age"`
     Gender    string    `json:"gender"`
-    FirstName string    `json:"first_name"`
-    LastName  string    `json:"last_name"`
+    FirstName string    `json:"firstName"`
+    LastName  string    `json:"lastName"`
     CreatedAt time.Time `json:"created_at"`
 }
 
 type Post struct {
     ID         int       `json:"id"`
-    UserID     int       `json:"user_id"`
+    UserID     int       `json:"user_id"`  // Add this field
     Title      string    `json:"title"`
     Content    string    `json:"content"`
     Author     string    `json:"author"`
-    Likes      int       `json:"likes"`
-    Dislikes   int       `json:"dislikes"`
     Categories []string  `json:"categories"`
     CreatedAt  time.Time `json:"created_at"`
+    Likes      int       `json:"likes"`
+    Dislikes   int       `json:"dislikes"`
 }
 
 type Comment struct {
     ID        int       `json:"id"`
     PostID    int       `json:"post_id"`
-    UserID    int       `json:"user_id"`
+    AuthorID  int       `json:"author_id"`
+    Author    string    `json:"author"`
     Content   string    `json:"content"`
-    Author    string    `json:"author"`      // Add author nickname
     CreatedAt time.Time `json:"created_at"`
 }
 

@@ -1,69 +1,101 @@
-
-3. [`#Docs/api-documentation.md`](#Docs/api-documentation.md ):
-```markdown
 # API Documentation
 
 ## Authentication
+
 ### Register User
 ```http
 POST /api/register
 Content-Type: application/json
 
 {
-  "email": "string",
-  "nickname": "string",
-  "password": "string",
-  "age": "number",
-  "gender": "string",
-  "firstName": "string",
-  "lastName": "string"
+    "email": "string",
+    "nickname": "string",
+    "password": "string",
+    "age": "number",
+    "gender": "string",
+    "firstName": "string",
+    "lastName": "string"
 }
-```
 
-### Login
+Response 200:
+{
+    "status": "success",
+    "message": "Registration successful"
+}
+
 ```
+### Login
 POST /api/login
 Content-Type: application/json
 
 {
-  "email": "string",
-  "password": "string"
+    "identifier": "string", // email or nickname
+    "password": "string"
 }
-```
-### Posts, Create Post
-```
+
+Response 200:
+{
+    "status": "success",
+    "token": "string"
+}
+
+## Posts
+### Create Post
 POST /api/posts
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "title": "string",
-  "content": "string",
-  "category": "number"
+    "title": "string",
+    "content": "string",
+    "categories": ["number"]
 }
-```
-## Error Response Format
-```json
+
+Response 200:
 {
-    "status": "error",
-    "message": "Error description"
+    "status": "success",
+    "data": {
+        "id": "number",
+        "title": "string",
+        "content": "string"
+    }
 }
 
+### List Posts
+GET /api/posts
+Authorization: Bearer <token>
 
-GitHub Copilot
-Let's document the error handling implementation and testing in the appropriate files:
+Response 200:
+{
+    "status": "success",
+    "data": [
+        {
+            "id": "number",
+            "title": "string",
+            "content": "string",
+            "author": "string",
+            "likes": "number",
+            "dislikes": "number",
+            "categories": ["string"]
+        }
+    ]
+}
 
-api-documentation.md:
-Standard Error Types
-Server Error (500)
+### Post Interactions
 
-Internal server errors
-Panic recovery
-Unexpected errors
-Not Found Error (404)
-
-Resource not found
-Invalid routes
-Headers
+POST /api/post/{id}/comment
+Authorization: Bearer <token>
 Content-Type: application/json
-Status Code: Appropriate HTTP status
+
+{
+    "content": "string"
+}
+
+POST /api/likes
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+    "post_id": "number",
+    "value": "number" // 1 for like, -1 for dislike
+}

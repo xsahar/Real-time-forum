@@ -1,12 +1,41 @@
 package ws
 
 import (
-	// "database/sql"
-	"database/sql"
-	"time"
+    "database/sql"
+    "encoding/json"
+    "net/http"
+    "time"
 )
 
+func MessageHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method == "GET" {
+        // Handle GET request for message history
+        w.Header().Set("Content-Type", "application/json")
+        
+        user1ID := r.URL.Query().Get("user1")
+        user2ID := r.URL.Query().Get("user2")
+        
+        // Example usage of user1ID and user2ID
+        if user1ID == "" || user2ID == "" {
+            http.Error(w, "Missing user IDs", http.StatusBadRequest)
+            return
+        }
+        
+        // Implementation for getting messages
+        
+    } else if r.Method == "POST" {
+        // Handle POST request for new message
+        w.Header().Set("Content-Type", "application/json")
+        
+        var msg Message
+        if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+        // Implementation for saving message
+    }
 
+}
 func (ms *MessageStore) SaveMessage(fromID, toID int, content string) error {
     _, err := ms.DB.Exec(`
         INSERT INTO messages (from_id, to_id, content, created_at)

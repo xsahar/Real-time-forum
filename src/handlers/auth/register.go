@@ -17,9 +17,9 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-    if r.Method != http.MethodPost {
-        w.Header().Set("Content-Type", "application/json")
+      if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
+        log.Printf("Invalid method %s", r.Method)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
             Error:  "Method not allowed",
@@ -27,7 +27,8 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-		var user models.User
+    // Read and log request body
+    var user models.User
     if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
         log.Printf("Failed to decode request body: %v", err)
         w.WriteHeader(http.StatusBadRequest)
@@ -40,10 +41,11 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Received user data: %+v", user)
 
-    // Validate required fields
-    if user.Email == "" || user.Password == "" || user.Nickname == "" {
-			log.Printf("Missing required fields - Email: %s, Password: %s, Nickname: %s", user.Email, user.Password, user.Nickname)
-        w.Header().Set("Content-Type", "application/json")
+    // Validate all required fields
+    if user.Email == "" || user.Password == "" || user.Nickname == "" || 
+       user.FirstName == "" || user.LastName == "" || user.Gender == "" || 
+       user.Age < 13 {
+        log.Printf("Missing or invalid fields: %+v", user)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
