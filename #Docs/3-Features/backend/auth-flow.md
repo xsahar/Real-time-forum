@@ -27,6 +27,7 @@ sequenceDiagram
     S->>DB: Validate Session
     S-->>C: Protected Resource
 
+```
 ## Components
 1. Frontend (JavaScript)
 
