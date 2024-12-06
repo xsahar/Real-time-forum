@@ -26,7 +26,11 @@ export class App {
     }
 
     async handleAuthentication(token, user) {
+        // Add debug log
+        console.log('Storing auth token:', token ? 'present' : 'missing');
         localStorage.setItem('auth_token', token);
+        console.log('Token stored, verifying:', localStorage.getItem('auth_token') ? 'present' : 'missing');
+        
         document.querySelector('.main-nav').style.display = 'flex';
         await this.handleRoute();
     }

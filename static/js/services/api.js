@@ -15,81 +15,96 @@ const ENDPOINTS = {
     }
 };
 
+const MAX_RETRIES = 3;
+const TIMEOUT = 5000;
+
 export class APIService {
     constructor() {
         this.baseURL = '/api';
         this.token = localStorage.getItem('auth_token');
-        console.log('API Service initialized, token:', this.token ? 'present' : 'missing');
+        console.log('[API] Service initialized, token:', this.token ? 'present' : 'missing');
     }
 
-    async request(method, endpoint, data = null) {
+    async request(method, endpoint, data = null, retryCount = 0) {
         try {
-            if (!method || !endpoint) {
-                throw new Error('Method and endpoint are required');
-            }
-
-            // Get fresh token on each request
-            const token = localStorage.getItem('auth_token');
-            console.log(`[API] Token for ${endpoint}:`, token ? 'present' : 'missing');
-
+            console.log(`[API] Making ${method} request to ${endpoint}`);
+            
             const options = {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    ...(token && { 'Authorization': `Bearer ${token}` })
+                    'Accept': 'application/json'
                 },
-                signal: AbortSignal.timeout(5000)
+                signal: AbortSignal.timeout(TIMEOUT)
             };
 
+            // Add auth header if token exists
+            if (this.token) {
+                options.headers['Authorization'] = `Bearer ${this.token}`;
+            }
+
+            // Handle request data
             if (data) {
-                const formattedData = 
-                    endpoint === 'register' ? this.formatRegisterData(data)
-                    : endpoint === 'login' ? this.formatLoginData(data)
-                    : data;
-
-                console.log(`[API] ${endpoint} request:`, {
-                    method,
-                    endpoint,
-                    hasToken: !!token,
-                    data: {
-                        ...formattedData,
-                        password: '[REDACTED]'
-                    }
+                const formattedData = this.formatRequestData(endpoint, data);
+                console.log(`[API] ${endpoint} request data:`, {
+                    ...formattedData,
+                    password: '[REDACTED]'
                 });
-
                 options.body = JSON.stringify(formattedData);
             }
 
+            // Make request
             const response = await fetch(`${this.baseURL}/${endpoint}`, options);
-            const text = await response.text();
-            
-            let result;
-            try {
-                result = text ? JSON.parse(text) : {};
-            } catch (parseError) {
-                console.error(`[API] JSON parse error:`, parseError);
-                throw new Error('Invalid response format');
-            }
+            console.log(`[API] ${endpoint} status:`, response.status);
 
-            // Handle auth token in response
-            if (result?.data?.token) {
-                localStorage.setItem('auth_token', result.data.token);
-                console.log('[API] Token stored successfully');
-            }
-
+            // Handle non-OK responses
             if (!response.ok) {
-                throw new Error(result.error || `Request failed: ${response.statusText}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Parse response
+            const text = await response.text();
+            if (!text) {
+                throw new Error('Empty response');
+            }
+
+            const result = JSON.parse(text);
+            console.log(`[API] ${endpoint} response:`, {
+                status: result.status,
+                hasData: !!result.data,
+                hasToken: !!result.data?.token
+            });
+
+            // Handle auth token
+            if (result?.data?.token) {
+                this.token = result.data.token;
+                localStorage.setItem('auth_token', this.token);
+                console.log('[API] Token updated');
             }
 
             return result;
+
         } catch (error) {
+            if (error.name === 'AbortError' && retryCount < MAX_RETRIES) {
+                console.log(`[API] Retry attempt ${retryCount + 1}`);
+                return this.request(method, endpoint, data, retryCount + 1);
+            }
             console.error(`[API] ${endpoint} error:`, error);
             throw error;
         }
     }
 
-    // Rest of methods remain the same
+    formatRequestData(endpoint, data) {
+        switch (endpoint) {
+            case 'login':
+                return this.formatLoginData(data);
+            case 'register':
+                return this.formatRegisterData(data);
+            default:
+                return data;
+        }
+    }
+
     formatLoginData(data) {
         if (!data.identifier || !data.password) {
             throw new Error('Identifier and password are required');
@@ -110,19 +125,26 @@ export class APIService {
             gender: data.gender,
             age: parseInt(data.age)
         };
-        this.validateRegisterData(formattedData);
-        return formattedData;
-    }
 
-    validateRegisterData(data) {
+        // Validate register data
         const requiredFields = ['nickname', 'email', 'password', 'firstName', 'lastName', 'gender', 'age'];
-        const missingFields = requiredFields.filter(field => !data[field]);
+        const missingFields = requiredFields.filter(field => !formattedData[field]);
+        
         if (missingFields.length > 0) {
             throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
         }
-        if (data.password.length < 6) throw new Error('Password must be at least 6 characters');
-        if (!data.email.includes('@')) throw new Error('Invalid email format');
-        if (data.nickname.length < 3) throw new Error('Nickname must be at least 3 characters');
+
+        if (formattedData.password.length < 6) {
+            throw new Error('Password must be at least 6 characters');
+        }
+        if (!formattedData.email.includes('@')) {
+            throw new Error('Invalid email format');
+        }
+        if (formattedData.nickname.length < 3) {
+            throw new Error('Nickname must be at least 3 characters');
+        }
+
+        return formattedData;
     }
 
     async get(endpoint) {

@@ -116,7 +116,7 @@ func CreateTables() error {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             token TEXT UNIQUE NOT NULL,
-            expires_at DATETIME NOT NULL CHECK(expires_at > datetime('now')),
+            expires_at DATETIME NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
