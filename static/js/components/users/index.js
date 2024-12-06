@@ -1,4 +1,3 @@
-// static/js/components/users/index.js
 import { LoginForm } from './LoginForm.js';
 import { RegisterForm } from './RegisterForm.js';
 
@@ -16,11 +15,11 @@ export class UsersComponent {
         this.container.addEventListener('click', (e) => {
             if (e.target.id === 'show-register') {
                 e.preventDefault();
-                console.log('Switching to register form');
+                history.pushState(null, '', '/register');
                 this.showRegisterForm();
             } else if (e.target.id === 'show-login') {
                 e.preventDefault();
-                console.log('Switching to login form');
+                history.pushState(null, '', '/login');
                 this.showLoginForm();
             }
         });
@@ -33,16 +32,19 @@ export class UsersComponent {
 
             if (isAuth) {
                 this.navLinks.style.display = 'flex';
-                window.location.href = '/';
+                history.pushState(null, '', '/');
+                await this.app.handleRoute();
                 return;
             }
             this.showLoginForm();
         } catch (error) {
             console.error('Mount error:', error);
+            this.showLoginForm();
         }
     }
 
     showLoginForm() {
+        console.log('Showing login form');
         const loginForm = new LoginForm(
             this.container, 
             this.handleLogin.bind(this),
@@ -63,28 +65,38 @@ export class UsersComponent {
 
     async handleLogin(formData) {
         try {
+            console.log('Processing login:',{
+                identifier: formData.identifier,
+                hasPassword: !!formData.password
+            });
+
             const response = await this.api.post('login', formData);
-            if (response.status === 'success' && response.token) {
-                localStorage.setItem('auth_token', response.token);
+            if (response.status === 'success' && response.data?.token) {
+                localStorage.setItem('auth_token', response.data.token);
                 this.navLinks.style.display = 'flex';
-                window.location.href = '/';
+                history.pushState(null, '', '/');
+                await this.app.handleRoute();
                 return true;
             }
-            throw new Error(response.error || 'Login failed');
+            throw new Error(response?.error || 'Login failed');
         } catch (error) {
-            throw new Error(error.message || 'Login failed');
+            console.error('Login error:', error);
+            throw error;
         }
     }
 
     async handleRegister(formData) {
         try {
+            console.log('Processing registration');
             const response = await this.api.post('register', formData);
-            if (response.status === 'success') {
+            if (response?.status === 'success') {
+                history.pushState(null, '', '/login');
                 this.showLoginForm();
                 return true;
             }
             throw new Error(response.error || 'Registration failed');
         } catch (error) {
+            console.error('Registration error:', error);
             throw new Error(error.message || 'Registration failed');
         }
     }
@@ -92,11 +104,20 @@ export class UsersComponent {
     async checkAuth() {
         try {
             const token = localStorage.getItem('auth_token');
-            if (!token) return false;
+            if (!token){
+                 return false;
+            }
             
             const response = await this.api.get('auth/status');
-            return response.status === 'success';
+            if(!response?.status === 'success'){
+                localStorage.removeItem('auth_token');
+                return false;
+            }
+
+
+            return true;
         } catch (error) {
+            console.error('Auth check error:', error);
             localStorage.removeItem('auth_token');
             return false;
         }

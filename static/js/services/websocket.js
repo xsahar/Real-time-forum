@@ -1,8 +1,13 @@
+// static/js/services/websocket.js
 export class WebSocketService {
     constructor() {
+        this.baseURL = `ws://${window.location.host}/ws`;
         this.handlers = new Map();
+        this.connected = false;
         this.retryCount = 0;
-        this.maxRetries = 5;
+        this.maxRetries = 3;
+        this.messageQueue = [];
+        
         this.connect();
     }
 
@@ -10,35 +15,36 @@ export class WebSocketService {
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) {
-                console.warn('No auth token found for WebSocket connection');
-                return;
+                throw new Error('No auth token found');
             }
 
-            const wsUrl = `ws://${window.location.host}/ws?token=${token}`;
-            this.ws = new WebSocket(wsUrl);
+            this.ws = new WebSocket(`${this.baseURL}?token=${token}`);
             this.setupEventHandlers();
         } catch (error) {
             console.error('WebSocket connection failed:', error);
-            this.handleConnectionError();
         }
     }
 
     setupEventHandlers() {
         this.ws.onopen = () => {
             console.log('WebSocket connected');
+            this.connected = true;
             this.retryCount = 0;
+            this.processMessageQueue();
         };
 
         this.ws.onclose = (event) => {
+            this.connected = false;
             if (event.code === 1000) {
                 console.log('WebSocket closed normally');
                 return;
             }
-            this.handleConnectionError();
+            this.handleReconnect();
         };
 
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
+            this.connected = false;
         };
 
         this.ws.onmessage = (event) => {
@@ -47,33 +53,52 @@ export class WebSocketService {
                 const handler = this.handlers.get(message.type);
                 if (handler) handler(message.data);
             } catch (error) {
-                console.error('Failed to handle WebSocket message:', error);
+                console.error('Failed to handle message:', error);
             }
         };
     }
 
-    handleConnectionError() {
+    handleReconnect() {
         if (this.retryCount >= this.maxRetries) {
             console.error('Max reconnection attempts reached');
             return;
         }
 
-        const delay = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
-        console.log(`Attempting to reconnect in ${delay/1000} seconds...`);
+        const delay = Math.min(1000 * Math.pow(2, this.retryCount), 5000);
+        this.retryCount++;
+
+        console.log(`Reconnecting in ${delay}ms...`);
+        setTimeout(() => this.connect(), delay);
+    }
+
+    send(type, data) {
+        const message = JSON.stringify({ type, data });
         
-        setTimeout(() => {
-            this.retryCount++;
-            this.connect();
-        }, delay);
+        if (!this.connected) {
+            this.messageQueue.push(message);
+            return;
+        }
+
+        this.ws.send(message);
+    }
+
+    processMessageQueue() {
+        while (this.messageQueue.length > 0 && this.connected) {
+            const message = this.messageQueue.shift();
+            this.ws.send(message);
+        }
     }
 
     on(type, handler) {
         this.handlers.set(type, handler);
     }
 
-    send(type, data) {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type, data }));
+    disconnect() {
+        if (this.ws) {
+            this.ws.close(1000, 'User logout');
+            this.connected = false;
+            this.handlers.clear();
+            this.messageQueue = [];
         }
     }
 }

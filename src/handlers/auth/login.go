@@ -18,8 +18,20 @@ type LoginCredentials struct {
     Password   string `json:"password"`
 }
 
+func cleanExpiredSessions() error {
+    _, err := database.DB.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
+    return err
+}
+
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+    if err := cleanExpiredSessions(); err != nil {
+        log.Printf("Failed to clean expired sessions: %v", err)
+    }
 
     if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
@@ -41,7 +53,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Validate credentials
+    log.Printf("Login attempt for identifier: %s", creds.Identifier)
+
     if creds.Identifier == "" || creds.Password == "" {
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(AuthResponse{
@@ -51,15 +64,16 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Find user by email or nickname
     var user models.User
-    err := database.DB.QueryRow(
-        "SELECT id, password FROM users WHERE email = ? OR nickname = ?",
+    err := database.DB.QueryRow(`
+        SELECT id, email, nickname, password, first_name, last_name 
+        FROM users 
+        WHERE email = ? OR nickname = ?`,
         creds.Identifier, creds.Identifier,
-    ).Scan(&user.ID, &user.Password)
+    ).Scan(&user.ID, &user.Email, &user.Nickname, &user.Password, &user.FirstName, &user.LastName)
 
     if err != nil {
-        log.Printf("User not found: %v", err)
+        log.Printf("User lookup failed: %v", err)
         w.WriteHeader(http.StatusUnauthorized)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -68,9 +82,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Verify password
     if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)); err != nil {
-        log.Printf("Password verification failed: %v", err)
+        log.Printf("Password verification failed for user: %s", user.Email)
         w.WriteHeader(http.StatusUnauthorized)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -79,10 +92,9 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Start transaction for session management
     tx, err := database.DB.Begin()
     if err != nil {
-        log.Printf("Failed to begin transaction: %v", err)
+        log.Printf("Transaction start failed: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -92,7 +104,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
-    // Clear existing sessions for user
     _, err = tx.Exec("DELETE FROM sessions WHERE user_id = ?", user.ID)
     if err != nil {
         log.Printf("Failed to clear existing sessions: %v", err)
@@ -104,7 +115,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create new session
     sessionToken := uuid.NewString()
     expiresAt := time.Now().Add(24 * time.Hour)
     
@@ -113,7 +123,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         user.ID, sessionToken, expiresAt,
     )
     if err != nil {
-        log.Printf("Failed to create session: %v", err)
+        log.Printf("Session creation failed: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -122,9 +132,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Commit transaction
     if err = tx.Commit(); err != nil {
-        log.Printf("Failed to commit transaction: %v", err)
+        log.Printf("Transaction commit failed: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(AuthResponse{
             Status: "error",
@@ -133,7 +142,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Set session cookie
     http.SetCookie(w, &http.Cookie{
         Name:     "session_token",
         Value:    sessionToken,
@@ -143,15 +151,21 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         SameSite: http.SameSiteStrictMode,
     })
 
-    // Single response with token
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(AuthResponse{
-        Status:  "success",
-        Message: "Login successful",
-        Data: map[string]string{
+        Status: "success",
+        Data: map[string]interface{}{
             "token": sessionToken,
+            "user": map[string]interface{}{
+                "id":        user.ID,
+                "email":     user.Email,
+                "nickname":  user.Nickname,
+                "firstName": user.FirstName,
+                "lastName":  user.LastName,
+            },
         },
+        Message: "Login successful",
     })
+    
+    log.Printf("User logged in successfully: %s", user.Email)
 }
-
-// Removed duplicate LogoutHandler function

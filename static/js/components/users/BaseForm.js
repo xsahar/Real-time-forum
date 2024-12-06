@@ -1,4 +1,4 @@
-
+// static/js/components/users/BaseForm.js
 export class BaseForm {
     constructor(container, onSubmit, onSwitchForm) {
         this.container = container;
@@ -9,6 +9,14 @@ export class BaseForm {
     mount() {
         this.container.innerHTML = this.render();
         this.setupListeners();
+    }
+
+    render() {
+        throw new Error('Render method must be implemented by child class');
+    }
+
+    setupListeners() {
+        throw new Error('SetupListeners method must be implemented by child class');
     }
 
     showError(message) {
@@ -24,6 +32,18 @@ export class BaseForm {
         if (errorDiv) {
             errorDiv.textContent = '';
             errorDiv.style.display = 'none';
+        }
+    }
+
+    validateFormData(data) {
+        throw new Error('ValidateFormData method must be implemented by child class');
+    }
+
+    resetForm() {
+        const form = this.container.querySelector('form');
+        if (form) {
+            form.reset();
+            this.clearError();
         }
     }
 }
