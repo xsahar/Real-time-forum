@@ -7,7 +7,7 @@ erDiagram
     USERS ||--o{ COMMENTS : writes
     POSTS ||--o{ COMMENTS : has
     CATEGORIES ||--o{ POSTS : contains
-
+```
 Table Overview
 
 1. Users
