@@ -18,6 +18,7 @@
    - ServerError: 500 responses
    - NotFoundError: 404 responses
    - RecoveryHandler: Panic recovery
+```
 
 ## Testing Implementation
 Location: `tests/unit/handlers/core/error_test.go`
@@ -71,6 +72,7 @@ Location: `tests/unit/handlers/core/error_test.go`
 - Dislike count accuracy
 - Unique constraint
 - Foreign key constraints
+```
 
 ## Debug Guide
 
