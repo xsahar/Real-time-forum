@@ -12,6 +12,28 @@ export class App {
         this.setupAuthListeners();
     }
 
+    cleanup() {
+        // Disconnect WebSocket
+        if (this.ws) {
+            this.ws.disconnect();
+            this.ws = null;
+        }
+
+        // Clear auth data
+        localStorage.removeItem('auth_token');
+
+        // Clear components
+        Object.values(this.components).forEach(component => {
+            component?.cleanup?.();
+        });
+        this.components = {};
+
+        // Reset API service
+        this.api = null;
+
+        console.log('App cleanup completed');
+    }
+
     setupAuthListeners() {
         window.addEventListener('login-success', (event) => {
             const { token, user } = event.detail;

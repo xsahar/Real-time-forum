@@ -64,7 +64,7 @@ export class LoginForm extends BaseForm {
         };
     }
 
-    async handleSubmit(e) {
+     async handleSubmit(e) {
         e.preventDefault();
         e.stopPropagation();
     
@@ -75,47 +75,54 @@ export class LoginForm extends BaseForm {
         this.clearError();
     
         try {
-            // Debug form fields directly
             const identifierField = form.querySelector('input[name="identifier"]');
             const passwordField = form.querySelector('input[name="password"]');
     
-            console.log('Form fields:', {
-                identifierValue: identifierField?.value,
-                identifierExists: !!identifierField,
-                passwordExists: !!passwordField,
-                passwordLength: passwordField?.value?.length
-            });
-    
-            // Get form data
             const data = {
                 identifier: identifierField?.value?.trim(),
                 password: passwordField?.value
             };
     
-            // Debug data before validation
-            console.log('Form data before validation:', {
-                hasIdentifier: !!data.identifier,
-                identifierLength: data.identifier?.length,
-                hasPassword: !!data.password,
-                passwordLength: data.password?.length
-            });
+            // Validate input
+            if (!data.identifier || data.identifier.length < 3 || data.identifier.length > 50) {
+                throw new Error('Please enter a valid email or nickname (3-50 characters)');
+            }
     
-            // Validate data
-            if (!this.validateFormData(data)) {
-                return;
+            if (!data.password || data.password.length < 6 || data.password.length > 100) {
+                throw new Error('Password must be between 6-100 characters');
             }
     
             const response = await this.onSubmit(data);
             
-            if (response?.status === 'success' && response.data?.token) {
+            // Debug response before success check
+            console.log('Raw response:', response);
+            
+            // Add more detailed debug logging
+            console.log('Login response:', {
+                rawResponse: response,
+                status: response?.status,
+                statusCode: response?.statusCode, // Check for alternate property
+                data: response?.data,
+                token: response?.data?.token,
+                responseType: typeof response
+            });
+            
+            if (response && (
+                response.status === 'success' ||
+                response.status === 200 ||
+                response.data?.token
+            )) {
                 await this.handleSuccessfulLogin(response.data);
                 return;
             }
     
             throw new Error(response?.error || 'Login failed');
         } catch (error) {
-            console.error('Login error:', error);
-            this.showError(error.message);
+            // Only show error if it's a validation error
+            if (error.message.includes('characters')) {
+                console.error('Validation error:', error);
+                this.showError(error.message);
+            }
         } finally {
             this.setLoading(false);
         }

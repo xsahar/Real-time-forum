@@ -101,6 +101,28 @@ export class UsersComponent {
         }
     }
 
+    async logout() {
+        try {
+            // Clear auth token
+            localStorage.removeItem('auth_token');
+            
+            // Clear WebSocket connection
+            this.app.ws?.disconnect();
+            
+            // Hide navigation
+            document.querySelector('.main-nav').style.display = 'none';
+
+            
+            // Navigate to login
+        history.pushState(null, '', '/login');
+        await this.app.showComponent('users', 'login');
+            
+            console.log('Logout successful');
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+
     async checkAuth() {
         try {
             const token = localStorage.getItem('auth_token');
