@@ -109,17 +109,11 @@ export class UsersComponent {
             }
             
             const response = await this.api.get('auth/status');
-            if(!response?.status === 'success'){
-                localStorage.removeItem('auth_token');
-                return false;
-            }
-
-
-            return true;
-        } catch (error) {
-            console.error('Auth check error:', error);
-            localStorage.removeItem('auth_token');
-            return false;
-        }
+        return response?.status === 'success';
+    } catch (error) {
+        console.error('Auth check error:', error);
+        localStorage.removeItem('auth_token');
+        return false;
+    }
     }
 }

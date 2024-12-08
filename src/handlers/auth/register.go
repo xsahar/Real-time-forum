@@ -109,22 +109,9 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
     // Insert user (let SQLite handle timestamp)
     result, err := tx.Exec(`
-        INSERT INTO users (
-            email, 
-            nickname, 
-            password, 
-            age, 
-            gender, 
-            first_name, 
-            last_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        user.Email,
-        user.Nickname,
-        hashedPassword,
-        user.Age,
-        user.Gender,
-        user.FirstName,
-        user.LastName,
+        INSERT INTO users (email, nickname, password, age, gender, first_name, last_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        user.Email, user.Nickname, hashedPassword, user.Age, user.Gender, user.FirstName, user.LastName,
     )
 
     if err != nil {
@@ -177,7 +164,6 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Set session cookie
     http.SetCookie(w, &http.Cookie{
         Name:     "session_token",
         Value:    sessionToken,
@@ -189,7 +175,10 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
     w.WriteHeader(http.StatusCreated)
     json.NewEncoder(w).Encode(AuthResponse{
-        Status:  "success",
+        Status: "success",
+        Data: map[string]interface{}{
+            "token": sessionToken,
+        },
         Message: "Registration successful",
     })
 }

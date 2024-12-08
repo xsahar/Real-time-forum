@@ -1,15 +1,12 @@
-// Main application class that handles routing, component management, and authentication
-import { APIService } from '/static/js/services/api.js';
+import { APIService } from './services/api.js';
 import { WebSocketService } from './services/websocket.js';
-import { ChatComponent } from './components/chat.js';
 import { PostsComponent } from './components/posts.js';
+import { ChatComponent } from './components/chat.js';
 import { UsersComponent } from './components/users/index.js';
 
 export class App {
     constructor() {
-        // Initialize API service for backend communication
         this.api = new APIService();
-        // Store component instances
         this.components = {};
         this.setupRoutes();
         this.setupAuthListeners();
@@ -26,7 +23,6 @@ export class App {
     }
 
     async handleAuthentication(token, user) {
-        // Add debug log
         console.log('Storing auth token:', token ? 'present' : 'missing');
         localStorage.setItem('auth_token', token);
         console.log('Token stored, verifying:', localStorage.getItem('auth_token') ? 'present' : 'missing');
@@ -36,29 +32,26 @@ export class App {
     }
 
     setupRoutes() {
-        // Define application routes and their handlers
         this.routes = {
             '/': {
                 component: 'posts',
                 requireAuth: true,
-                // Async: Waits for posts component to load and mount
                 handler: async () => {
-                    await this.showComponent('posts');
                     document.getElementById('content').style.display = 'block';
+                    await this.showComponent('posts');
                 }
             },
             '/login': {
                 component: 'users',
                 requireAuth: false,
-                // Async: Handles login form display and mounting
                 handler: async () => {
+                    document.getElementById('auth-container').style.display = 'block';
                     await this.showComponent('users', 'login');
                 }
             },
             '/register': {
                 component: 'users',
                 requireAuth: false,
-                // Async: Handles registration form display and mounting
                 handler: async () => {
                     await this.showComponent('users', 'register');
                 }
@@ -66,92 +59,131 @@ export class App {
             '/chat': {
                 component: 'chat',
                 requireAuth: true,
-                // Async: Initializes chat component and WebSocket
                 handler: async () => {
                     await this.showComponent('chat');
                 }
             }
         };
 
-        // Listen for browser navigation events
         window.addEventListener('popstate', () => this.handleRoute());
     }
 
-    // Async: Initializes application state and components
     async initialize() {
         try {
-            // Check if user is authenticated
             const isAuthenticated = await this.checkAuth();
             
-            // Initialize components based on auth state
             this.components = {
                 posts: new PostsComponent(this),
                 chat: isAuthenticated ? new ChatComponent(this) : null,
                 users: new UsersComponent(this)
             };
-
-            // Setup WebSocket for real-time communication if authenticated
+    
             if (isAuthenticated) {
                 this.ws = new WebSocketService();
                 document.querySelector('.main-nav').style.display = 'flex';
+                document.getElementById('content').style.display = 'block';
+                await this.showComponent('posts'); // Show posts on auth
             }
-
-            // Handle initial route
-            await this.handleRoute();
-            console.log('App initialized successfully');
+    
+            await this.showComponent('posts');
         } catch (error) {
-            console.error('Initialization failed:', error);
+            console.error('Authentication check failed:', error);
+            history.pushState(null, '', '/login');
+            await this.showComponent('users', 'login');
+        }
+
+        console.log('App initialized successfully');
+        return true;
+    } catch (error) {
+        console.error('Initialization failed:', error);
+        return false;
+    }
+
+
+    async handleLogin(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const formData = new FormData(form);
+        const data = {
+            identifier: formData.get('identifier'),
+            password: formData.get('password')
+        };
+
+        try {
+            const response = await this.api.post('login', data);
+            if (response.status === 'success' && response.data?.token) {
+                localStorage.setItem('auth_token', response.data.token);
+                window.location.href = '/';
+                return;
+            }
+            throw new Error(response.error || 'Login failed');
+        } catch (error) {
+            console.error('Login error:', error);
+            throw error;
         }
     }
 
-    // Async: Handles route changes and authentication checks
     async handleRoute() {
         const path = window.location.pathname;
         const route = this.routes[path] || this.routes['/'];
-
-        // Redirect to login if auth required but not authenticated
+    
         if (route.requireAuth && !(await this.checkAuth())) {
             history.pushState(null, '', '/login');
-            await this.handleRoute();
+            await this.showComponent('users', 'login');
             return;
         }
-
+    
+        // Hide all containers first
+        ['content', 'auth-container', 'chat-container'].forEach(id => {
+            const container = document.getElementById(id);
+            if (container) container.style.display = 'none';
+        });
+    
+        // Show navigation if authenticated
+        const nav = document.querySelector('.main-nav');
+        if (await this.checkAuth()) {
+            nav.style.display = 'flex';
+        } else {
+            nav.style.display = 'none';
+        }
+    
         await route.handler();
     }
 
-    // Async: Manages component visibility and mounting
     async showComponent(name, mode = null) {
         const component = this.components[name];
-        if (!component) return;
+        if (!component) {
+            console.error('Component ${name}not found');
+            return;
+        }
 
-        // Hide all other components
-        Object.keys(this.components).forEach(key => {
-            const container = document.getElementById(`${key}-container`);
-            if (container) {
-                container.style.display = 'none';
-            }
+        ['content', 'auth-container', 'chat-container'].forEach(id => {
+            const container = document.getElementById(id);
+            if (container) container.style.display = 'none';
         });
 
-        // Show and initialize requested component
-        const container = document.getElementById(`${name}-container`);
+        // Show appropriate container based on component
+        const containerId = name === 'users' ? 'auth-container' : 'content';
+        const container = document.getElementById(containerId);
         if (container) {
             container.style.display = 'block';
-            if (mode) {
-                component.setMode?.(mode);
-            }
-            await component.mount?.();
+        }
+
+        await component.mount?.();
+        if (mode && component.setMode) {
+            component.setMode(mode);
         }
     }
 
-    // Async: Verifies user authentication status
     async checkAuth() {
         try {
             const token = localStorage.getItem('auth_token');
             console.log('Checking auth token:', token ? 'present' : 'missing');
 
-            if (!token){
-             return false;   
-            } 
+            if (!token) {
+                return false;
+            }
 
             console.log('Sending auth status request');
             const response = await this.api.get('auth/status');
@@ -163,5 +195,5 @@ export class App {
             localStorage.removeItem('auth_token');
             return false;
         }
-}
+    }
 }

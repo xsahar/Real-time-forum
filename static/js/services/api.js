@@ -37,59 +37,45 @@ export class APIService {
                 },
                 signal: AbortSignal.timeout(TIMEOUT)
             };
-
-            // Add auth header if token exists
+    
             if (this.token) {
                 options.headers['Authorization'] = `Bearer ${this.token}`;
             }
-
-            // Handle request data
+    
             if (data) {
                 const formattedData = this.formatRequestData(endpoint, data);
-                console.log(`[API] ${endpoint} request data:`, {
-                    ...formattedData,
-                    password: '[REDACTED]'
-                });
                 options.body = JSON.stringify(formattedData);
             }
-
-            // Make request
+    
             const response = await fetch(`${this.baseURL}/${endpoint}`, options);
             console.log(`[API] ${endpoint} status:`, response.status);
-
-            // Handle non-OK responses
+    
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
-            // Parse response
+    
             const text = await response.text();
+            
+            // Handle empty response differently for auth/status endpoint
+            if (endpoint === 'auth/status' && (!text || text.trim() === '')) {
+                return { status: 'success' }; // Return success for empty auth check
+            }
+    
             if (!text) {
                 throw new Error('Empty response');
             }
-
+    
             const result = JSON.parse(text);
-            console.log(`[API] ${endpoint} response:`, {
-                status: result.status,
-                hasData: !!result.data,
-                hasToken: !!result.data?.token
-            });
-
-            // Handle auth token
-            if (result?.data?.token) {
-                this.token = result.data.token;
-                localStorage.setItem('auth_token', this.token);
-                console.log('[API] Token updated');
+            
+            if (result.status === 'error') {
+                throw new Error(result.error || 'Request failed');
             }
-
+    
             return result;
-
         } catch (error) {
             if (error.name === 'AbortError' && retryCount < MAX_RETRIES) {
-                console.log(`[API] Retry attempt ${retryCount + 1}`);
                 return this.request(method, endpoint, data, retryCount + 1);
             }
-            console.error(`[API] ${endpoint} error:`, error);
             throw error;
         }
     }
@@ -151,7 +137,7 @@ export class APIService {
         return this.request('GET', endpoint);
     }
 
-    async post(endpoint, data) {
-        return this.request('POST', endpoint, data);
+            async post(endpoint, data) {
+            return this.request('POST', endpoint, data);
+        }
     }
-}
