@@ -164,6 +164,17 @@ func validateTables() error {
         if count == 0 {
             return fmt.Errorf("table %s does not exist", table)
         }
+
+        if table == "categories" {
+            var categoryCount int
+            err := DB.QueryRow("SELECT COUNT(*) FROM categories").Scan(&categoryCount)
+            if err != nil {
+                log.Printf("Failed to count categories: %v", err)
+            } else {
+                log.Printf("Found %d categories in the database", categoryCount)
+            }
+        }
+
         log.Printf("Table %s exists", table)
     }
     return nil
@@ -172,6 +183,19 @@ func validateTables() error {
 func InitCategories() error {
     if DB == nil {
         return fmt.Errorf("database connection is nil")
+    }
+
+    log.Printf("Initializing categories...")
+
+    var count int
+    err := DB.QueryRow("SELECT COUNT(*) FROM categories").Scan(&count)
+    if err != nil {
+        return fmt.Errorf("failed to check existing categories: %v", err)
+    }
+    
+    if count > 0 {
+        log.Printf("Categories already initialized (%d categories exist)", count)
+        return nil
     }
 
     tx, err := DB.Begin()
@@ -198,9 +222,15 @@ func InitCategories() error {
         if _, err := stmt.Exec(category); err != nil {
             return fmt.Errorf("failed to insert category %s: %v", category, err)
         }
+        log.Printf("Category %s inserted", category)
     }
 
-    return tx.Commit()
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("failed to commit categories: %v", err)
+    }
+
+    log.Printf("Successfully initialized %d categories", len(categories))
+    return nil
 }
 
 func CleanupExpiredSessions() error {

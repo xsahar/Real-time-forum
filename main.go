@@ -11,6 +11,7 @@ import (
     "Real-time-forum/src/handlers/categories"
     "Real-time-forum/src/handlers/core"
     "Real-time-forum/src/handlers/posts"
+     postsCrud "Real-time-forum/src/handlers/posts/crud"
     "Real-time-forum/src/handlers/ws"
     "Real-time-forum/src/middleware"
 
@@ -50,7 +51,7 @@ func setupRoutes() {
         {"/api/logout", auth.LogoutHandler, false},
         {"/api/create-post", posts.CreatePostHandler, false},
         {"/api/post/{id}/comments", posts.PostAndCommentHandler, false},
-        {"/api/like/{id}", posts.LikeHandler, true},
+        {"/api/like/{id}",postsCrud.LikeHandler, true},
         {"/api/chat/messages", ws.MessageHandler, false},
         {"/api/chat/ws", ws.WebSocketHandler(&ws.Hub{}), false},
         {"/api/categories", categories.CategoriesHandler, false},

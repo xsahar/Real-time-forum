@@ -1,15 +1,20 @@
 package posts
 
 import (
-    "encoding/json"
-    "net/http"
-    "strconv"
-    "strings"
-    // "time"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
 
-    "Real-time-forum/src/database"
-    "Real-time-forum/src/handlers/auth"
-    "Real-time-forum/src/models"
+	// "time"
+
+	"Real-time-forum/src/database"
+	"Real-time-forum/src/handlers/auth"
+	"Real-time-forum/src/models"
+    "Real-time-forum/src/handlers/posts/crud"
+    
 )
 
 type PostResponse struct {
@@ -23,8 +28,8 @@ type PostResponse struct {
 
 func ListPostsHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
+    log.Printf("ListPostsHandler: Received %s request", r.Method)
 
-    // Only allow GET method
     if r.Method != http.MethodGet {
         json.NewEncoder(w).Encode(PostResponse{
             Status: "error",
@@ -33,83 +38,30 @@ func ListPostsHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Query posts with details
-    query := `
-        SELECT 
-            p.id, p.user_id, p.title, p.content, p.created_at,
-            u.nickname as author,
-            (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND value = 1) as likes,
-            (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND value = -1) as dislikes
-        FROM posts p
-        JOIN users u ON p.user_id = u.id
-        ORDER BY p.created_at DESC
-    `
-
-    rows, err := database.DB.Query(query)
+    // Use GetAllPosts from database package
+    posts, err := database.GetAllPosts()
     if err != nil {
+        log.Printf("ListPostsHandler: Database error: %v", err)
         json.NewEncoder(w).Encode(PostResponse{
             Status: "error",
-            Error:  "Failed to fetch posts",
+            Error:  fmt.Sprintf("Failed to fetch posts: %v", err),
         })
         return
     }
-    defer rows.Close()
 
-    var posts []models.Post
-    for rows.Next() {
-        var post models.Post
-        err := rows.Scan(
-            &post.ID, 
-            &post.UserID, 
-            &post.Title, 
-            &post.Content, 
-            &post.CreatedAt,
-            &post.Author, 
-            &post.Likes, 
-            &post.Dislikes,
-        )
-        if err != nil {
-            continue
-        }
-
-        // Get categories for each post
-        categories, err := getPostCategories(post.ID)
-        if err == nil {
-            post.Categories = categories
-        }
-
-        posts = append(posts, post)
-    }
-
-    // Return success response
-    json.NewEncoder(w).Encode(PostResponse{
+    response := PostResponse{
         Status: "success",
         Data:   posts,
-    })
+    }
+    
+    if len(posts) == 0 {
+        log.Printf("ListPostsHandler: No posts found")
+        response.Message = "No posts available"
+    }
+
+    json.NewEncoder(w).Encode(response)
 }
 
-func getPostCategories(postID int) ([]string, error) {
-    rows, err := database.DB.Query(`
-        SELECT c.name 
-        FROM categories c
-        JOIN post_categories pc ON c.id = pc.category_id
-        WHERE pc.post_id = ?
-    `, postID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-
-    var categories []string
-    for rows.Next() {
-        var category string
-        if err := rows.Scan(&category); err != nil {
-            return nil, err
-        }
-        categories = append(categories, category)
-    }
-    return categories, nil
-}
 
 // CreatePostHandler creates a new post
 func CreatePostHandler(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +148,7 @@ func GetPostHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     // Get post with categories and comments
-    post, err := getPostWithDetails(id)
+    post, err := database.GetPostWithDetails(id)
     if err != nil {
         http.Error(w, "Post not found", http.StatusNotFound)
         return
@@ -207,49 +159,6 @@ func GetPostHandler(w http.ResponseWriter, r *http.Request) {
         Data:   post,
     })
 }
-
-func getPostWithDetails(postID int) (*models.Post, error) {
-    var post models.Post
-    err := database.DB.QueryRow(`
-        SELECT 
-            p.id, p.user_id, p.title, p.content, p.created_at,
-            u.nickname as author,
-            (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND value = 1) as likes,
-            (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND value = -1) as dislikes
-        FROM posts p
-        JOIN users u ON p.user_id = u.id
-        WHERE p.id = ?`, postID).Scan(
-        &post.ID, &post.UserID, &post.Title, &post.Content, &post.CreatedAt,
-        &post.Author, &post.Likes, &post.Dislikes)
-    if err != nil {
-        return nil, err
-    }
-
-    post.Categories, _ = getPostCategories(post.ID)
-    return &post, nil
-}
-
-// func getPostCategories(postID int) ([]string, error) {
-//     rows, err := database.DB.Query(`
-//         SELECT c.name
-//         FROM categories c
-//         JOIN post_categories pc ON c.id = pc.category_id
-//         WHERE pc.post_id = ?`, postID)
-//     if err != nil {
-//         return nil, err
-//     }
-//     defer rows.Close()
-
-//     var categories []string
-//     for rows.Next() {
-//         var category string
-//         if err := rows.Scan(&category); err != nil {
-//             continue
-//         }
-//         categories = append(categories, category)
-//     }
-//     return categories, nil
-// }
 
 func DeletePostHandler(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodDelete {
@@ -370,7 +279,6 @@ func UpdatePostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func PostAndCommentHandler(w http.ResponseWriter, r *http.Request) {
-
     w.Header().Set("Content-Type", "application/json")
 
     // Get post ID from URL
@@ -406,11 +314,13 @@ func PostAndCommentHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if r.Method == http.MethodGet {
+    // Handle methods
+    switch r.Method {
+    case http.MethodGet:
         GetPostHandler(w, r)
-    } else if r.Method == http.MethodPost {
-        CommentHandler(w, r)
-    } else {
+    case http.MethodPost:
+        crud.CommentHandler(w, r)  // Use the imported crud package
+    default:
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 }

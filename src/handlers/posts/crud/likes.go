@@ -1,14 +1,15 @@
-package posts
+package crud
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strconv"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strconv"
+    "strings"
 
-	"Real-time-forum/src/database"
-	"Real-time-forum/src/handlers/auth"
+    "Real-time-forum/src/database"
+    "Real-time-forum/src/handlers/auth"
 )
 
 type LikeResponse struct {
@@ -20,9 +21,21 @@ type LikeResponse struct {
     } `json:"data,omitempty"`
 }
 
-
 func LikeHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
+
+    // Parse URL path first for logging
+    parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+    if len(parts) != 3 {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "error",
+            "message": "Invalid URL format",
+        })
+        return
+    }
+
+    log.Printf("LikeHandler: Processing request for post %s", parts[2])
     
     userID, ok := auth.ValidateSession(w, r)
     if !ok {
@@ -30,17 +43,6 @@ func LikeHandler(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{
             "status": "error",
             "message": "Unauthorized",
-        })
-        return
-    }
-
-    // Parse URL path: /api/(like|dislike)/postID
-    parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-    if len(parts) != 3 {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{
-            "status": "error",
-            "message": "Invalid URL format",
         })
         return
     }
@@ -64,10 +66,24 @@ func LikeHandler(w http.ResponseWriter, r *http.Request) {
         action = "Dislike"
     }
 
+    // Start transaction
+    tx, err := database.DB.Begin()
+    if err != nil {
+        log.Printf("Error starting transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "error",
+            "message": "Database error",
+        })
+        return
+    }
+    defer tx.Rollback()
+
     // Check if post exists
     var exists bool
-    err = database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID).Scan(&exists)
+    err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID).Scan(&exists)
     if err != nil {
+        log.Printf("Error checking post existence: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{
             "status": "error",
@@ -84,18 +100,30 @@ func LikeHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Update likes
-    _, err = database.DB.Exec(`
+    // Update likes within transaction
+    _, err = tx.Exec(`
         INSERT INTO likes (post_id, user_id, value)
         VALUES (?, ?, ?)
         ON CONFLICT(post_id, user_id) DO UPDATE SET value = ?`,
         postID, userID, value, value)
     
     if err != nil {
+        log.Printf("Error updating like: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{
             "status": "error",
             "message": "Failed to update like",
+        })
+        return
+    }
+
+    // Commit transaction
+    if err = tx.Commit(); err != nil {
+        log.Printf("Error committing transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "error",
+            "message": "Database error",
         })
         return
     }
@@ -114,7 +142,6 @@ func LikeHandler(w http.ResponseWriter, r *http.Request) {
         },
     })
 }
-
 
 func DislikeHandler(w http.ResponseWriter, r *http.Request) {
     // Extract post ID from original path
@@ -144,6 +171,7 @@ func getPostLikesDislikes(postID int) (likes int, dislikes int) {
         FROM likes 
         WHERE post_id = ?`, postID).Scan(&likes, &dislikes)
     if err != nil {
+        log.Printf("Error getting like counts: %v", err)
         return 0, 0
     }
     return

@@ -1,7 +1,7 @@
 import { APIService } from './services/api.js';
 import { WebSocketService } from './services/websocket.js';
-import { PostsComponent } from './components/posts.js';
-import { ChatComponent } from './components/chat.js';
+import { PostsComponent } from './components/posts/index.js';  // Changed from posts.js
+import { ChatComponent } from './components/chat/index.js';    // Changed from chat.js
 import { UsersComponent } from './components/users/index.js';
 
 export class App {
@@ -10,6 +10,7 @@ export class App {
         this.components = {};
         this.setupRoutes();
         this.setupAuthListeners();
+
     }
 
     cleanup() {

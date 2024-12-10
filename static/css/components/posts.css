@@ -1,14 +1,42 @@
-.posts-list {
-    max-width: 800px;
+/* Layout */
+.posts-layout {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 2rem;
+    max-width: 1200px;
     margin: 0 auto;
+    padding: 1rem;
+}
+
+/* Sidebar */
+.sidebar {
+    position: sticky;
+    top: 1rem;
+    height: fit-content;
+}
+
+/* Posts List */
+.posts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
 }
 
 .post {
     background: white;
     border-radius: 8px;
     padding: 1.5rem;
-    margin-bottom: 1.5rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+
+.post:hover {
+    transform: translateY(-2px);
+}
+
+.post h2 {
+    margin: 0 0 1rem;
+    color: var(--text-primary);
 }
 
 .post-meta {
@@ -17,59 +45,54 @@
     align-items: center;
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
+}
+
+.post-actions {
+    display: flex;
+    gap: 0.5rem;
 }
 
 .post-actions button {
     padding: 0.5rem 1rem;
-    margin-left: 0.5rem;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    background: #f0f0f0;
+    background: var(--background-secondary);
+    color: var(--text-primary);
+    transition: background 0.2s;
+}
+
+.post-actions button:hover {
+    background: var(--background-hover);
 }
 
 .post-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin: 0.5rem 0;
 }
 
 .category {
-    display: inline-block;
     padding: 0.25rem 0.75rem;
-    margin: 0.25rem;
     background: var(--accent-color);
     color: white;
     border-radius: 1rem;
     font-size: 0.875rem;
 }
 
-.categories-selection {
-    margin: 1rem 0;
-}
-
-.categories-selection label {
-    display: inline-block;
-    margin: 0.25rem 0.5rem;
-    padding: 0.5rem;
-    background: #f5f5f5;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.categories-selection input[type="checkbox"] {
-    margin-right: 0.5rem;
-}
-
+/* Comments */
 .comments-section {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
 }
 
 .comment {
-    padding: 0.5rem;
+    padding: 1rem;
     margin-bottom: 0.5rem;
-    background: #f5f5f5;
+    background: var(--background-secondary);
     border-radius: 4px;
 }
 
@@ -79,9 +102,21 @@
 
 .comment-form textarea {
     width: 100%;
-    min-height: 60px;
-    margin-bottom: 0.5rem;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
+    min-height: 80px;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
+    resize: vertical;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .posts-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        position: static;
+        margin-bottom: 1rem;
+    }
 }

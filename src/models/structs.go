@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type User struct {
     ID        int       `json:"id"`
@@ -37,10 +40,10 @@ type Comment struct {
 }
 
 type Category struct {
-    ID          int       `json:"id"`
-    Name        string    `json:"name"`
-    Description string    `json:"description,omitempty"`
-    CreatedAt   time.Time `json:"created_at"`
+    ID          int              `json:"id"`
+    Name        string           `json:"name"`
+    Description sql.NullString   `json:"description,omitempty"`
+    CreatedAt   time.Time        `json:"created_at"`
 }
 
 type Like struct {

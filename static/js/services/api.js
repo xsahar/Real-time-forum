@@ -12,6 +12,11 @@ const ENDPOINTS = {
     posts: {
         list: 'posts',
         create: 'posts/create'
+    },
+    
+    categories: {
+        list: 'categories',
+        create: 'categories/create'
     }
 };
 
