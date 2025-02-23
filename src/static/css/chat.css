@@ -1,0 +1,93 @@
+.chat-container {
+  z-index: 1001; /* Increase z-index */
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  right: -300px; /* Hide by default */
+  top: 0;
+  bottom: 0;
+  width: 300px;
+  background: #ffffff; /* Change to white for better contrast */
+  border-left: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.3s ease;
+}
+
+.chat-container.open {
+  right: 0;
+}
+
+.chat-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #007bff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex; /* Change from 'none' to 'flex' */
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  opacity: 0; /* Add this */
+  transition: opacity 0.3s, background-color 0.3s; /* Update transition */
+}
+
+.chat-toggle:hover {
+  background: #0056b3;
+}
+
+.chat-toggle.visible {
+  opacity: 1;
+}
+
+.chat-header {
+  padding: 15px;
+  background: #007bff;
+  color: white;
+  border-bottom: 1px solid #0056b3;
+}
+
+.chat-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* Update users-list styles */
+.users-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.user-item {
+  padding: 10px 15px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.user-item:hover {
+  background: #eee;
+}
+
+.user-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
+.online {
+  background: #4caf50;
+}
+
+.offline {
+  background: #9e9e9e;
+}
