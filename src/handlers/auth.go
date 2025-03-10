@@ -161,6 +161,16 @@ func LoginHandler(db *sql.DB) http.HandlerFunc {
 		token := uuid.New().String()
 		log.Printf("Login successful for user: %s", user.Nickname)
 
+		// Store session in database
+		_, err = db.Exec("INSERT INTO sessions (token, user_id) VALUES (?, ?)", token, user.ID)
+		if err != nil {
+			log.Printf("Error storing session: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Server error"})
+			return
+		}
+
 		// Send response
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(AuthResponse{
@@ -172,47 +182,49 @@ func LoginHandler(db *sql.DB) http.HandlerFunc {
 
 func AuthMiddleware(db *sql.DB, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Allow WebSocket upgrade requests without token in header
+		var token string
+
+		// For WebSocket connections, allow token from query parameter
 		if r.URL.Path == "/api/ws" {
-			token := r.URL.Query().Get("token")
-			if token == "" {
-				http.Error(w, "No token provided", http.StatusUnauthorized)
-				return
+			token = r.URL.Query().Get("token")
+		} else {
+			// For regular API requests, use Authorization header
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
 			}
-
-			var userId string
-			err := db.QueryRow("SELECT user_id FROM sessions WHERE token = ?", token).Scan(&userId)
-			if err != nil {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), "userId", userId)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
 		}
 
-		// Regular API auth handling
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "No authorization header", http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == "" {
-			http.Error(w, "Invalid token format", http.StatusUnauthorized)
+		if token == "" {
+			http.Error(w, "No authorization token", http.StatusUnauthorized)
 			return
 		}
 
 		var userId string
-		err := db.QueryRow("SELECT user_id FROM sessions WHERE token = ?", tokenString).Scan(&userId)
+		err := db.QueryRow("SELECT user_id FROM sessions WHERE token = ?", token).Scan(&userId)
 		if err != nil {
+			log.Printf("Auth error: %v", err)
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
+		if userId == "" {
+			log.Printf("Auth error: Empty user ID")
+			http.Error(w, "Invalid session", http.StatusUnauthorized)
+			return
+		}
+
+		// Create a new context with the user ID
 		ctx := context.WithValue(r.Context(), "userId", userId)
+
+		// Update online status for WebSocket connections
+		if r.URL.Path == "/api/ws" {
+			_, err = db.Exec("UPDATE users SET online = true WHERE id = ?", userId)
+			if err != nil {
+				log.Printf("Error updating online status: %v", err)
+			}
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -42,6 +42,13 @@ func main() {
 	}
 	defer db.Close()
 
+	// Ensure online status column exists
+	if err := database.EnsureOnlineColumn(db); err != nil {
+		log.Printf("Warning: Failed to ensure online column exists: %v", err)
+	} else {
+		log.Printf("Database schema verified successfully")
+	}
+
 	// Create router
 	mux := http.NewServeMux()
 
@@ -96,14 +103,23 @@ func main() {
 
 		// Messages routes
 		case strings.HasPrefix(path, "messages"):
-			switch r.Method {
-			case http.MethodGet:
-				handlers.GetMessagesHandler(db).ServeHTTP(w, r)
-			case http.MethodPost:
-				handlers.SendMessageHandler(db).ServeHTTP(w, r)
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
+			// Ensure authentication middleware is applied
+			authHandler := handlers.AuthMiddleware(db, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					handlers.GetMessagesHandler(db).ServeHTTP(w, r)
+				case http.MethodPost:
+					handlers.SendMessageHandler(db).ServeHTTP(w, r)
+				default:
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}))
+			authHandler.ServeHTTP(w, r)
+
+		// WebSocket route
+		case path == "ws":
+			// Apply auth middleware to WebSocket handler
+			handlers.AuthMiddleware(db, handlers.WebSocketHandler(db)).ServeHTTP(w, r)
 
 		default:
 			http.NotFound(w, r)

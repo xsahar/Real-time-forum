@@ -1,8 +1,9 @@
 package database
 
 import (
-    "database/sql"
-    _ "github.com/mattn/go-sqlite3"
+	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const schema = `
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_name TEXT,
     email TEXT UNIQUE,
     password TEXT,
+    online BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,19 +49,50 @@ CREATE TABLE IF NOT EXISTS messages (
     is_read BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (sender_id) REFERENCES users(id),
     FOREIGN KEY (receiver_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );`
 
 func InitDB(dbPath string) (*sql.DB, error) {
-    db, err := sql.Open("sqlite3", dbPath)
-    if err != nil {
-        return nil, err
-    }
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, err
+	}
 
-    // Create tables
-    _, err = db.Exec(schema)
-    if err != nil {
-        return nil, err
-    }
+	// Create tables
+	_, err = db.Exec(schema)
+	if err != nil {
+		return nil, err
+	}
 
-    return db, nil
+	return db, nil
+}
+
+// Add this function after the InitDB function
+func EnsureOnlineColumn(db *sql.DB) error {
+	// Check if online column exists
+	var count int
+	err := db.QueryRow(`
+        SELECT COUNT(*) FROM pragma_table_info('users') 
+        WHERE name='online'
+    `).Scan(&count)
+
+	if err != nil {
+		return err
+	}
+
+	// If the column doesn't exist, add it
+	if count == 0 {
+		_, err := db.Exec(`ALTER TABLE users ADD COLUMN online BOOLEAN DEFAULT FALSE`)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
