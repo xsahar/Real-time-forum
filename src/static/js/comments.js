@@ -12,6 +12,12 @@ export const initComments = () => {
             e.preventDefault();
             const textarea = form.querySelector('textarea');
             const submitBtn = form.querySelector('button');
+            
+            // Use the global currentPostId
+            if (!window.currentPostId) {
+                alert('Post ID not found');
+                return;
+            }
 
             if (!textarea.value.trim()) {
                 alert('Please write a comment');
@@ -22,14 +28,23 @@ export const initComments = () => {
             submitBtn.textContent = 'Posting...';
 
             try {
-                const comment = await createComment(postId, textarea.value.trim());
-                const commentsList = document.querySelector('.comments-list');
+                const comment = await createComment(window.currentPostId, textarea.value.trim());
+                
+                const commentsSection = document.querySelector('.comments-section');
+                const commentsList = commentsSection.querySelector('.comments-list');
+                const loadingEl = commentsSection.querySelector('.loading-placeholder');
+                
+                // Remove loading message if it exists
+                if (loadingEl) {
+                    loadingEl.remove();
+                }
+                
                 const noComments = commentsList.querySelector('.no-comments');
-
                 if (noComments) {
                     noComments.remove();
                 }
 
+                // Create and insert the new comment
                 const commentElement = document.createElement('div');
                 commentElement.className = 'comment current-user-comment';
                 commentElement.innerHTML = `
@@ -46,8 +61,10 @@ export const initComments = () => {
                     <div class="comment-content">${comment.content}</div>
                 `;
 
+                // Insert at the top of the list
                 commentsList.insertBefore(commentElement, commentsList.firstChild);
                 textarea.value = '';
+                
             } catch (error) {
                 alert(error.message);
             } finally {
@@ -56,9 +73,34 @@ export const initComments = () => {
             }
         });
     }
+
+    // Make loadComments also set the currentPostId
+    window.loadAndDisplayComments = async function(postId) {
+        currentPostId = postId;
+        await loadComments(postId);
+    };
 };
 
 export async function loadComments(postId) {
+    // IMPORTANT: Set the currentPostId when loading comments
+    // This is the key fix we need to make
+    window.currentPostId = postId;
+    
+    const commentsSection = document.querySelector('.comments-section');
+    if (!commentsSection) {
+        console.error('Comments section not found');
+        return;
+    }
+    
+    const commentsList = commentsSection.querySelector('.comments-list');
+    if (!commentsList) {
+        console.error('Comments list not found');
+        return;
+    }
+    
+    // Show loading message
+    commentsList.innerHTML = `<div class="loading-placeholder">Loading comments...</div>`;
+    
     try {
         const token = localStorage.getItem('token');
         const user = JSON.parse(localStorage.getItem('user'));
@@ -77,28 +119,34 @@ export async function loadComments(postId) {
 
         const comments = await response.json();
 
-        // Sort comments - current user's comments first, then by date
+        // Sort comments - newest first, with current user's comments at top
         comments.sort((a, b) => {
             if (a.userId === user.id && b.userId !== user.id) return -1;
             if (a.userId !== user.id && b.userId === user.id) return 1;
             return new Date(b.createdAt) - new Date(a.createdAt);
         });
 
-        return comments.map(comment => `
-            <div class="comment ${comment.userId === user.id ? 'current-user-comment' : ''}">
-                <div class="comment-meta">
-                    <span class="author">
-                        ${comment.author ? `${comment.author.nickname} (${comment.author.firstName} ${comment.author.lastName})` : 'Unknown'}
-                    </span>
-                    <span class="date">${new Date(comment.createdAt).toLocaleString()}</span>
+        if (comments.length === 0) {
+            commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        } else {
+            const commentsHTML = comments.map(comment => `
+                <div class="comment ${comment.userId === user.id ? 'current-user-comment' : ''}">
+                    <div class="comment-meta">
+                        <span class="author">
+                            ${comment.author ? `${comment.author.nickname} (${comment.author.firstName} ${comment.author.lastName})` : 'Unknown'}
+                        </span>
+                        <span class="date">${new Date(comment.createdAt).toLocaleString()}</span>
+                    </div>
+                    <div class="comment-content">${comment.content}</div>
                 </div>
-                <div class="comment-content">${comment.content}</div>
-            </div>
-        `).join('');
+            `).join('');
+            
+            commentsList.innerHTML = commentsHTML;
+        }
 
     } catch (error) {
         console.error('Error loading comments:', error);
-        throw error;
+        commentsList.innerHTML = `<div class="error-message">Failed to load comments: ${error.message}</div>`;
     }
 }
 

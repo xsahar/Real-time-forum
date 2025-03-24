@@ -98,8 +98,8 @@ func main() {
 			handlers.GetCategoriesHandler(w, r)
 
 		// Online users route
-		case path == "users/online":
-			handlers.GetOnlineUsersHandler(db).ServeHTTP(w, r)
+	case path == "users/online":
+		handlers.AuthMiddleware(db, handlers.GetOnlineUsersHandler(db)).ServeHTTP(w, r)
 
 		// Messages routes
 		case strings.HasPrefix(path, "messages"):

@@ -1,0 +1,87 @@
+.users-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  background: #f8f9fa;
+  border-top: 1px solid #ddd;
+}
+
+.user-item {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+.user-item:hover {
+  background: #e9ecef;
+}
+
+.user-item.active {
+  background: #e3f2fd;
+}
+
+.message-info {
+  padding: 15px;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  cursor: default;
+  border-bottom: 1px solid #eee;
+}
+
+.user-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.online {
+  background: #4caf50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.offline {
+  background: #9e9e9e;
+}
+
+.user-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  font-weight: 500;
+  color: #333;
+}
+
+.last-message-time {
+  font-size: 10px;
+  color: #999;
+  margin-left: auto;
+  padding-left: 8px;
+  white-space: nowrap;
+}
+
+/* Fix positioning of notification dot */
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #ff4136;
+  border-radius: 50%;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Make the user list items more touch-friendly */
+@media (max-width: 768px) {
+  .user-item {
+    padding: 15px;
+  }
+}

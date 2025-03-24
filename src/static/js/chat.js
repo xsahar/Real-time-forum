@@ -1,17 +1,23 @@
-// src/static/js/chat.js
+import { loadOnlineUsers} from './chatAPI.js';
+import { formatMessageDate } from './chatUtils.js';
 import { loadMessages, sendMessage, initMessages, setActiveRecipient } from './messages.js';
+
+let usersList; // DOM element reference
+let currentChatUser = null;
+let unreadMessages = {}; // Unread message status
 
 export const initChat = () => {
     const chatSection = document.getElementById('chat-section');
     const chatToggle = document.getElementById('chat-toggle');
-    const usersList = chatSection.querySelector('.users-list');
+    usersList = chatSection.querySelector('.users-list');
     const chatMessages = chatSection.querySelector('.chat-messages');
     const messagesContainer = chatSection.querySelector('.messages-container');
     const messageInput = chatSection.querySelector('.message-input input');
     const sendButton = chatSection.querySelector('.send-message');
     const backButton = chatSection.querySelector('.back-to-users');
 
-    let currentChatUser = null;
+    // Load unread messages from localStorage
+    unreadMessages = JSON.parse(localStorage.getItem('unreadMessages') || '{}');
 
     if (!chatSection || !chatToggle) {
         console.error('Chat elements not found:', { chatSection, chatToggle });
@@ -21,28 +27,28 @@ export const initChat = () => {
     // Initialize messages module
     initMessages();
 
-    // Toggle chat sidebar
-    chatToggle.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Chat toggle clicked');
-        chatSection.classList.toggle('open');
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+        chatToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Chat toggle clicked (mobile)');
+            chatSection.classList.toggle('open');
+            if (chatSection.classList.contains('open')) {
+                loadOnlineUsers();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!chatSection.contains(e.target) && !chatToggle.contains(e.target) && chatSection.classList.contains('open')) {
+                chatSection.classList.remove('open');
+            }
+        });
+    } else {
+        chatSection.classList.add('open');
+        chatToggle.style.display = 'none';
+    }
 
-        if (chatSection.classList.contains('open')) {
-            loadOnlineUsers();
-        }
-    });
-
-    // Close chat when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!chatSection.contains(e.target) &&
-            !chatToggle.contains(e.target) &&
-            chatSection.classList.contains('open')) {
-            chatSection.classList.remove('open');
-        }
-    });
-
-    // Handle user selection
+    // Handle user selection from the users list
     usersList.addEventListener('click', (e) => {
         const userItem = e.target.closest('.user-item');
         if (userItem) {
@@ -50,6 +56,11 @@ export const initChat = () => {
             currentChatUser = userId;
             setActiveRecipient(userId);
             showChatMessages(userId);
+            const unread = JSON.parse(localStorage.getItem('unreadMessages') || '{}');
+            if (unread[userId]) {
+                delete unread[userId];
+                localStorage.setItem('unreadMessages', JSON.stringify(unread));
+            }
         }
     });
 
@@ -62,151 +73,209 @@ export const initChat = () => {
         }
     });
 
-    // Add back button handler
+    // Back button handler
     backButton.addEventListener('click', () => {
         chatMessages.style.display = 'none';
         usersList.style.display = 'block';
         backButton.style.display = 'none';
+        
+        // Clear the active recipient and remove active class from all user items
         currentChatUser = null;
         setActiveRecipient(null);
+        
+        // IMPORTANT: Remove the currentChatOpen flag when closing chat
+        localStorage.removeItem('currentChatOpen');
+        
+        document.querySelectorAll('.user-item.active').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // Refresh users list to ensure correct status display
+        loadOnlineUsers();
     });
 
-    // Show chat toggle for logged-in users
+    // Show chat if user is logged in
     const token = localStorage.getItem('token');
     if (token) {
-        console.log('User is logged in, showing chat toggle');
-        chatToggle.classList.add('visible');
-        loadOnlineUsers();
+        console.log('User is logged in, showing chat');
+        if (isMobile) {
+            chatToggle.classList.add('visible');
+        } else {
+            loadOnlineUsers();
+        }
     } else {
-        console.log('User is not logged in, hiding chat toggle');
+        console.log('User is not logged in, hiding chat');
+        chatSection.classList.remove('open');
         chatToggle.classList.remove('visible');
     }
 
-    async function loadOnlineUsers() {
-        try {
-            const response = await fetch('/api/users/online', {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-            });
-
-            if (!response.ok) throw new Error('Failed to load users');
-
-            const users = await response.json();
-            sortAndRenderUsers(users);
-        } catch (error) {
-            console.error('Error loading users:', error);
-            usersList.innerHTML = '<div class="error">Failed to load users</div>';
+    // Reload page on viewport change (mobile/desktop)
+    window.addEventListener('resize', () => {
+        const newIsMobile = window.innerWidth <= 768;
+        if (newIsMobile !== isMobile) {
+            location.reload();
         }
-    }
+    });
 
-    function sortAndRenderUsers(users) {
-        // Sort users: first by having recent messages, then by online status, then by nickname
-        users.sort((a, b) => {
-            // First priority: has messages (this would need additional logic from your backend)
-            if (a.hasMessages && !b.hasMessages) return -1;
-            if (!a.hasMessages && b.hasMessages) return 1;
-
-            // Second priority: online status
-            if (a.online && !b.online) return -1;
-            if (!a.online && b.online) return 1;
-
-            // Last priority: nickname alphabetically
-            return a.nickname.localeCompare(b.nickname);
-        });
-
-        usersList.innerHTML = users.map(user => `
-            <div class="user-item" data-user-id="${user.id}">
-                <span class="user-status ${user.online ? 'online' : 'offline'}"></span>
-                <span class="user-name">${user.nickname}</span>
-            </div>
-        `).join('');
-    }
-
+    // Show messages for a selected user
     async function showChatMessages(userId) {
         usersList.style.display = 'none';
         chatMessages.style.display = 'flex';
         backButton.style.display = 'block';
+        messagesContainer.innerHTML = '<div class="loading-indicator"><div class="spinner"></div>Loading messages...</div>';
+        
+        // Set active recipient
+        setActiveRecipient(userId);
+        
+        // Mark the chat as viewed in localStorage
+        localStorage.setItem('currentChatOpen', userId);
+        
+        // Remove any notification dot
+        const unread = JSON.parse(localStorage.getItem('unreadMessages') || '{}');
+        if (unread[userId]) {
+            delete unread[userId];
+            localStorage.setItem('unreadMessages', JSON.stringify(unread));
+        }
 
-        // Clear previous messages
-        messagesContainer.innerHTML = '<div class="loading-indicator">Loading messages...</div>';
-
-        await loadChatHistory(userId);
-    }
-
-    async function loadChatHistory(userId) {
         try {
-            const messages = await loadMessages(userId);
+            // Use chatAPI to load messages - limit to 10 most recent
+            const messages = await loadMessages(userId, 10, 0);
+            
+            // Simply render the messages - don't set up scrolling here
             renderMessages(messages);
+            
+            // Let the global scroll handler in messages.js take care of loading more
         } catch (error) {
             console.error('Error loading messages:', error);
             messagesContainer.innerHTML = '<div class="error">Failed to load messages</div>';
         }
     }
 
+    // Update renderMessages to include date headers like WhatsApp
     function renderMessages(messages) {
         if (!messages || messages.length === 0) {
             messagesContainer.innerHTML = '<div class="no-messages">No messages yet. Say hello!</div>';
             return;
         }
-    
+        
         const currentUserId = JSON.parse(localStorage.getItem('user')).id;
         messagesContainer.innerHTML = '';
-    
-        // Make sure messages are sorted by date (oldest first)
-        const sortedMessages = [...messages].sort((a, b) => {
-            return new Date(a.createdAt) - new Date(b.createdAt);
-        });
-    
-        // Render each message
+        
+        // Sort messages by date (oldest first)
+        const sortedMessages = [...messages].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        
+        let currentDate = null;
+        
+        // Add message elements to DOM
         sortedMessages.forEach(message => {
+            const messageDate = new Date(message.createdAt);
+            const messageDateStr = messageDate.toDateString();
+            
+            // If this message is from a different date than the previous one, add a date header
+            if (currentDate !== messageDateStr) {
+                currentDate = messageDateStr;
+                
+                // Create a date divider
+                const dateHeader = document.createElement('div');
+                dateHeader.className = 'date-header';
+                
+                // Get a user-friendly date string
+                const today = new Date().toDateString();
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toDateString();
+                
+                let dateText;
+                if (messageDateStr === today) {
+                    dateText = 'Today';
+                } else if (messageDateStr === yesterdayStr) {
+                    dateText = 'Yesterday';
+                } else {
+                    // For other dates, use a more readable format
+                    dateText = messageDate.toLocaleDateString([], {
+                        weekday: 'long',
+                        month: 'long', 
+                        day: 'numeric', 
+                        year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+                    });
+                }
+                
+                dateHeader.textContent = dateText;
+                messagesContainer.appendChild(dateHeader);
+            }
+            
+            // Create the message element
             const isIncoming = message.senderId !== currentUserId;
             const messageElement = document.createElement('div');
             messageElement.className = `message ${isIncoming ? 'received' : 'sent'}`;
             messageElement.dataset.messageId = message.id;
-    
+            
+            // Show only time for the message, not the full date
+            const timeStr = messageDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
             messageElement.innerHTML = `
                 <div class="message-content">${message.content}</div>
-                <div class="message-time">${new Date(message.createdAt).toLocaleTimeString()}</div>
+                <div class="message-time">${timeStr}</div>
             `;
             messagesContainer.appendChild(messageElement);
         });
-    
-        // Scroll to bottom
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // Force scroll to bottom after messages render
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 50);
     }
 
     function sendChatMessage() {
         if (!currentChatUser || !messageInput.value.trim()) return;
-
+        
+        // Add a character limit to prevent excessively long messages
         const content = messageInput.value.trim();
-
-        if (sendMessage(currentChatUser, content)) {
-            // Add message to UI immediately for better UX
+        
+        // Limit message length
+        const MAX_MESSAGE_LENGTH = 250;
+        const truncatedContent = content.length > MAX_MESSAGE_LENGTH ? 
+            content.substring(0, MAX_MESSAGE_LENGTH) + "..." : 
+            content;
+        
+        if (sendMessage(currentChatUser, truncatedContent)) {
             const messageElement = document.createElement('div');
             messageElement.className = 'message sent';
-
             const tempId = 'temp-' + Date.now();
             messageElement.dataset.messageId = tempId;
-
             messageElement.innerHTML = `
-                <div class="message-content">${content}</div>
-                <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                <div class="message-content">${truncatedContent}</div>
+                <div class="message-time">${formatMessageDate(new Date())}</div>
             `;
-
             const noMessages = messagesContainer.querySelector('.no-messages');
-            if (noMessages) {
-                noMessages.remove();
-            }
-
+            if (noMessages) noMessages.remove();
             messagesContainer.appendChild(messageElement);
-
-            // Clear input and scroll to bottom
             messageInput.value = '';
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-            // Don't reload all messages after sending - WebSocket will handle confirmation
-            // Remove this line: loadChatHistory(currentChatUser);
+            refreshOnlineUsers();
         }
+    }
+
+    // Expose functions to mark messages as unread and to reload users
+    window.markMessageUnread = (senderId) => {
+        if (currentChatUser === senderId) return false;
+        unreadMessages[senderId] = true;
+        localStorage.setItem('unreadMessages', JSON.stringify(unreadMessages));
+        loadOnlineUsers();
+        return true;
+    };
+
+    window.loadOnlineUsers = loadOnlineUsers;
+};
+
+export const handleNewMessage = (senderId) => {
+    if (typeof window.markMessageUnread === 'function') {
+        window.markMessageUnread(senderId);
+    }
+};
+
+export const refreshOnlineUsers = () => {
+    if (typeof window.loadOnlineUsers === 'function') {
+        window.loadOnlineUsers();
     }
 };

@@ -1,4 +1,5 @@
-// src/static/js/websocket.js
+import { refreshOnlineUsers } from './chat.js';
+
 export class WebSocketClient {
     constructor() {
         this.socket = null;
@@ -21,6 +22,9 @@ export class WebSocketClient {
             this.socket.onopen = () => {
                 console.log('WebSocket connection established');
                 this.reconnectAttempts = 0;
+                
+                // Refresh users list when connection is established to see current online users
+                refreshOnlineUsers();
             };
 
             this.socket.onmessage = (event) => {
@@ -30,14 +34,35 @@ export class WebSocketClient {
 
                     switch (message.type) {
                         case 'message':
+                            // Check if this is a message we received (not sent by us)
+                            const currentUser = JSON.parse(localStorage.getItem('user'));
+                            if (!currentUser) break;
+                            
+                            const isSender = message.payload.senderId === currentUser.id;
+                            
+                            // Process the message with all handlers
                             this.messageHandlers.forEach(handler => handler(message.payload));
+                            
+                            // Immediately handle notification for received messages
+                            if (!isSender) {
+                                // This is an INCOMING message to us
+                                console.log("Received message from:", message.payload.senderId);
+                                
+                                // Immediately try to handle notification
+                                this.refreshWithRetries(message.payload);
+                            }
                             break;
+                        
                         case 'status':
                             this.statusHandlers.forEach(handler => handler(message.payload));
+                            // Refresh users list when status changes
+                            refreshOnlineUsers();
                             break;
+                            
                         case 'error':
                             console.error('WebSocket error message:', message.payload);
                             break;
+                            
                         default:
                             console.warn('Unknown message type:', message.type);
                             break;
@@ -74,6 +99,39 @@ export class WebSocketClient {
             console.error('Error creating WebSocket connection:', error);
         }
     }
+    
+       refreshWithRetries(messagePayload) {
+        setTimeout(() => {
+            refreshOnlineUsers();
+        }, 300);
+    }
+    
+    addNotificationDot(senderId) {
+        try {
+            // Get all matching user items (there should be just one)
+            const userItems = document.querySelectorAll(`.user-item[data-user-id="${senderId}"]`);
+            
+            if (userItems.length > 0) {
+                userItems.forEach(userItem => {
+                    // Check if notification dot already exists
+                    if (!userItem.querySelector('.notification-dot')) {
+                        const notificationDot = document.createElement('span');
+                        notificationDot.className = 'notification-dot';
+                        userItem.appendChild(notificationDot);
+                        console.log(`ADDED notification dot for user ${senderId}`);
+                    }
+                });
+                return true; // Successfully added notification
+            } else {
+                // If the user item doesn't exist in DOM yet, return false
+                console.log(`User item for ${senderId} not found in DOM`);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error adding notification dot:', error);
+            return false;
+        }
+    }
 
     onMessage(handler) {
         this.messageHandlers.add(handler);
@@ -100,6 +158,10 @@ export class WebSocketClient {
             try {
                 this.socket.send(JSON.stringify(message));
                 console.log('Message sent to WebSocket server');
+                
+                // Refresh users list after sending a message
+                setTimeout(refreshOnlineUsers, 300);
+                
                 return true;
             } catch (error) {
                 console.error('Error sending WebSocket message:', error);
