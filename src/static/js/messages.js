@@ -19,37 +19,33 @@ export const initMessages = () => {
 };
 
 export const loadMessages = async (userId, limit = 10, offset = 0) => {
+    if (!userId) return [];
+    
+    console.log(`Loading messages with ${userId}, limit: ${limit}, offset: ${offset}`);
+    
     try {
-        const token = localStorage.getItem('token');
-        if (!token) throw new Error('Authentication required');
-
-        // Check cache first
-        const cacheKey = `${userId}_${offset}_${limit}`;
-        if (messageCache.has(cacheKey)) {
-            return messageCache.get(cacheKey);
-        }
-
-        console.log(`Loading messages with ${userId}, limit: ${limit}, offset: ${offset}`);
-
         const response = await fetch(`/api/messages/${userId}?limit=${limit}&offset=${offset}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
         });
-
+        
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Message loading error:', response.status, errorText);
-            throw new Error('Failed to load messages');
+            throw new Error(`Failed to load messages: ${response.status}`);
         }
-
+        
         const messages = await response.json();
         console.log(`Loaded ${messages.length} messages with ${userId}`);
-
-        // Cache the results
-        messageCache.set(cacheKey, messages);
+        
+        // Cache the messages
+        messageCache.set(`${userId}-${offset}`, messages);
+        
         return messages;
     } catch (error) {
-        console.error('Error loading messages:', error);
-        throw error;
+        console.error('Error fetching messages:', error);
+        return [];
     }
 };
 
@@ -211,69 +207,127 @@ const debounce = (func, wait) => {
 
 // Handle scrolling to load more messages
 const setupScrollHandling = () => {
-    document.addEventListener('click', event => {
+    const observer = new MutationObserver((mutations) => {
         const messagesContainer = document.querySelector('.messages-container');
-        if (!messagesContainer) return;
-
-        // Force scrollbar to always show
-        messagesContainer.style.overflowY = 'scroll';
-        
-        // Setup scroll event listener once container is available
-        messagesContainer.addEventListener('scroll', debounce(async () => {
-            if (messagesContainer.scrollTop <= 50 && activeRecipient) {
-                // Prevent multiple simultaneous loading operations
-                if (messagesContainer.dataset.isLoading === 'true') {
-                    return;
-                }
-                messagesContainer.dataset.isLoading = 'true';
-                
-                const currentMessages = messagesContainer.querySelectorAll('.message').length;
-                
-                // Check if we actually need to load more messages
-                // If we have very few messages, don't try to load more
-                if (currentMessages < 5) {
-                    console.log('Not enough messages to warrant loading more');
-                    messagesContainer.dataset.isLoading = 'false';
-                    return;
-                }
-                
-                // Get existing message IDs
-                const existingMessageIds = new Set();
-                messagesContainer.querySelectorAll('.message').forEach(el => {
-                    if (el.dataset.messageId) {
-                        existingMessageIds.add(el.dataset.messageId);
+        if (messagesContainer && !messagesContainer.dataset.scrollInitialized) {
+            messagesContainer.dataset.scrollInitialized = 'true';
+            messagesContainer.style.overflowY = 'scroll';
+            
+            messagesContainer.addEventListener('scroll', debounce(async () => {
+                if (messagesContainer.scrollTop <= 50 && activeRecipient) {
+                    // Prevent multiple simultaneous requests
+                    if (messagesContainer.dataset.isLoading === 'true') {
+                        return;
                     }
-                });
-                
-                try {
-                    const newMessages = await loadMessages(activeRecipient, 10, currentMessages);
+                    messagesContainer.dataset.isLoading = 'true';
                     
-                    // Filter out any messages that already exist in the DOM
-                    const uniqueMessages = newMessages.filter(msg => 
-                        msg.id && !existingMessageIds.has(msg.id)
-                    );
+                    const currentMessages = messagesContainer.querySelectorAll('.message').length;
+                    console.log(`Scrolled to top! Loading more messages. Current count: ${currentMessages}`);
                     
-                    if (uniqueMessages.length > 0) {
-                        // Save current scroll position and height
-                        const scrollPos = messagesContainer.scrollHeight - messagesContainer.scrollTop;
+                    try {
+                        // Load more messages with the correct offset
+                        const newMessages = await loadMessages(activeRecipient, 10, currentMessages);
+                        console.log(`Loaded ${newMessages.length} more messages`);
+                        
+                        // Filter out any potential duplicates
+                        const existingIds = Array.from(messagesContainer.querySelectorAll('.message'))
+                            .map(el => el.dataset.messageId);
+                        const uniqueMessages = newMessages.filter(msg => !existingIds.includes(msg.id));
+                        
+                        // Replace the uniqueMessages.forEach section with this code:
+                        if (uniqueMessages.length > 0) {
+                            // Sort messages by date (oldest first)
+                            const sortedMessages = [...uniqueMessages].sort((a, b) => 
+                                new Date(a.createdAt) - new Date(b.createdAt)
+                            );
 
-                        // Add older messages to the top
-                        uniqueMessages.reverse().forEach(msg => {
-                            prependMessage(messagesContainer, msg);
-                        });
-
-                        // Restore scroll position
-                        messagesContainer.scrollTop = messagesContainer.scrollHeight - scrollPos;
+                            // Save current scroll position and height before adding messages
+                            const scrollPos = messagesContainer.scrollHeight - messagesContainer.scrollTop;
+                            
+                            // Get references to all elements before adding new ones
+                            const oldElements = Array.from(messagesContainer.children);
+                            
+                            // Track added elements for animation control
+                            const addedElements = [];
+                            
+                            // Add older messages to the top with date headers
+                            let currentDate = null;
+                            
+                            // Sort and add messages
+                            sortedMessages.reverse().forEach(msg => {
+                                const messageDate = new Date(msg.createdAt);
+                                const messageDateStr = messageDate.toDateString();
+                                
+                                // Check if we need a date header
+                                if (currentDate !== messageDateStr) {
+                                    currentDate = messageDateStr;
+                                    
+                                    // Check if we already have a header for this date
+                                    const existingHeader = messagesContainer.querySelector(`.date-header[data-date="${messageDateStr}"]`);
+                                    
+                                    if (!existingHeader) {
+                                        // Create date header
+                                        const dateHeader = document.createElement('div');
+                                        dateHeader.className = 'date-header';
+                                        dateHeader.dataset.date = messageDateStr;
+                                        dateHeader.textContent = formatDateHeader(messageDate);
+                                        
+                                        // Temporarily disable animation
+                                        dateHeader.style.animation = 'none';
+                                        
+                                        messagesContainer.insertBefore(dateHeader, messagesContainer.firstChild);
+                                        addedElements.push(dateHeader);
+                                    }
+                                }
+                                
+                                // Add the message
+                                const currentUser = JSON.parse(localStorage.getItem('user'));
+                                if (!currentUser) return;
+                                
+                                const isSender = msg.senderId === currentUser.id;
+                                
+                                const messageElement = document.createElement('div');
+                                messageElement.className = `message ${isSender ? 'sent' : 'received'}`;
+                                messageElement.dataset.messageId = msg.id;
+                                
+                                // Temporarily disable animation
+                                messageElement.style.animation = 'none';
+                                
+                                messageElement.innerHTML = `
+                                    <div class="message-content">${msg.content}</div>
+                                    <div class="message-time">${formatMessageDate(msg.createdAt)}</div>
+                                `;
+                                
+                                messagesContainer.insertBefore(messageElement, messagesContainer.firstChild);
+                                addedElements.push(messageElement);
+                            });
+                            
+                            // First restore scroll position without animation
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight - scrollPos;
+                            
+                            // Force a reflow to apply the scroll position
+                            void messagesContainer.offsetHeight;
+                            
+                            // Now re-enable animations with a slight delay
+                            setTimeout(() => {
+                                addedElements.forEach(el => {
+                                    el.style.animation = '';
+                                });
+                            }, 50);
+                        } else {
+                            console.log('No more messages to load');
+                        }
+                    } catch (error) {
+                        console.error('Error loading more messages:', error);
+                    } finally {
+                        messagesContainer.dataset.isLoading = 'false';
                     }
-                } catch (error) {
-                    console.error('Error loading more messages:', error);
-                } finally {
-                    // Always clear the loading flag
-                    messagesContainer.dataset.isLoading = 'false';
                 }
-            }
-        }, 300));
-    }, { once: true });
+            }, 300)); // 300ms debounce to prevent scroll event spamming`
+        }
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
 };
 
 // Helper to prepend a message to the container
@@ -352,3 +406,36 @@ export const setActiveRecipient = (userId) => {
         }
     }
 };
+
+
+// Format date for message display
+function formatMessageDate(dateString) {
+    const messageDate = new Date(dateString);
+    
+    // For simplicity, just return the time part
+    return messageDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+}
+
+// Add this function (which we also added to chat.js)
+function formatDateHeader(messageDate) {
+    const today = new Date().toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+    
+    const messageDateStr = messageDate.toDateString();
+    
+    if (messageDateStr === today) {
+        return 'Today';
+    } else if (messageDateStr === yesterdayStr) {
+        return 'Yesterday';
+    } else {
+        return messageDate.toLocaleDateString([], {
+            weekday: 'long',
+            month: 'long', 
+            day: 'numeric', 
+            year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        });
+    }
+}

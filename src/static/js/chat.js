@@ -1,4 +1,4 @@
-import { loadOnlineUsers} from './chatAPI.js';
+import { loadOnlineUsers } from './chatAPI.js';
 import { formatMessageDate } from './chatUtils.js';
 import { loadMessages, sendMessage, initMessages, setActiveRecipient } from './messages.js';
 
@@ -56,11 +56,6 @@ export const initChat = () => {
             currentChatUser = userId;
             setActiveRecipient(userId);
             showChatMessages(userId);
-            const unread = JSON.parse(localStorage.getItem('unreadMessages') || '{}');
-            if (unread[userId]) {
-                delete unread[userId];
-                localStorage.setItem('unreadMessages', JSON.stringify(unread));
-            }
         }
     });
 
@@ -117,6 +112,98 @@ export const initChat = () => {
         }
     });
 
+    // Helper function to format date headers consistently
+    function formatDateHeader(messageDate) {
+        const today = new Date().toDateString();
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toDateString();
+        
+        const messageDateStr = messageDate.toDateString();
+        
+        if (messageDateStr === today) {
+            return 'Today';
+        } else if (messageDateStr === yesterdayStr) {
+            return 'Yesterday';
+        } else {
+            return messageDate.toLocaleDateString([], {
+                weekday: 'long',
+                month: 'long', 
+                day: 'numeric', 
+                year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            });
+        }
+    }
+
+    // Define renderMessages first to avoid reference issues
+    window.renderMessages = function(messages) {
+        if (!messagesContainer) return;
+        
+        if (!messages || messages.length === 0) {
+            messagesContainer.innerHTML = '<div class="no-messages">No messages yet. Say hello!</div>';
+            return;
+        }
+        
+        const currentUserId = JSON.parse(localStorage.getItem('user')).id;
+        
+        // Clear container
+        messagesContainer.innerHTML = '';
+        
+        // Sort messages by date (newest first to match backend)
+        const sortedMessages = [...messages].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        // Take exactly 10 messages
+        const limitedMessages = sortedMessages.slice(0, 10);
+        
+        // Now reverse to display oldest first
+        const displayMessages = limitedMessages.reverse();
+        
+        console.log(`Enforcing display of ${displayMessages.length} messages (from ${messages.length} total)`);
+        
+        // Create fragment for better performance
+        let currentDate = null;
+        let fragment = document.createDocumentFragment();
+        
+        // Use the display messages array
+        displayMessages.forEach((message, index) => {
+            const messageDate = new Date(message.createdAt);
+            const messageDateStr = messageDate.toDateString();
+            
+            // If this message is from a different date than the previous one, add a date header
+            if (currentDate !== messageDateStr) {
+                currentDate = messageDateStr;
+                
+                // Create a date divider
+                const dateHeader = document.createElement('div');
+                dateHeader.className = 'date-header';
+                dateHeader.dataset.date = messageDateStr;
+                
+                // Format the date
+                dateHeader.textContent = formatDateHeader(messageDate);
+                
+                fragment.appendChild(dateHeader);
+            }
+            
+            // Create the message element
+            const isIncoming = message.senderId !== currentUserId;
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${isIncoming ? 'received' : 'sent'}`;
+            messageElement.dataset.messageId = message.id;
+            
+            messageElement.innerHTML = `
+                <div class="message-content">${message.content}</div>
+                <div class="message-time">${formatMessageDate(message.createdAt)}</div>
+            `;
+            fragment.appendChild(messageElement);
+        });
+        
+        // Add all elements at once for better performance
+        messagesContainer.appendChild(fragment);
+        
+        // Force scroll to bottom after messages render
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    };
+
     // Show messages for a selected user
     async function showChatMessages(userId) {
         usersList.style.display = 'none';
@@ -138,92 +225,15 @@ export const initChat = () => {
         }
 
         try {
-            // Use chatAPI to load messages - limit to 10 most recent
+            // Load exactly 10 most recent messages
             const messages = await loadMessages(userId, 10, 0);
+            console.log(`Loaded ${messages.length} messages for initial display`);
             
-            // Simply render the messages - don't set up scrolling here
-            renderMessages(messages);
-            
-            // Let the global scroll handler in messages.js take care of loading more
+            window.renderMessages(messages);
         } catch (error) {
             console.error('Error loading messages:', error);
             messagesContainer.innerHTML = '<div class="error">Failed to load messages</div>';
         }
-    }
-
-    // Update renderMessages to include date headers like WhatsApp
-    function renderMessages(messages) {
-        if (!messages || messages.length === 0) {
-            messagesContainer.innerHTML = '<div class="no-messages">No messages yet. Say hello!</div>';
-            return;
-        }
-        
-        const currentUserId = JSON.parse(localStorage.getItem('user')).id;
-        messagesContainer.innerHTML = '';
-        
-        // Sort messages by date (oldest first)
-        const sortedMessages = [...messages].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        
-        let currentDate = null;
-        
-        // Add message elements to DOM
-        sortedMessages.forEach(message => {
-            const messageDate = new Date(message.createdAt);
-            const messageDateStr = messageDate.toDateString();
-            
-            // If this message is from a different date than the previous one, add a date header
-            if (currentDate !== messageDateStr) {
-                currentDate = messageDateStr;
-                
-                // Create a date divider
-                const dateHeader = document.createElement('div');
-                dateHeader.className = 'date-header';
-                
-                // Get a user-friendly date string
-                const today = new Date().toDateString();
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toDateString();
-                
-                let dateText;
-                if (messageDateStr === today) {
-                    dateText = 'Today';
-                } else if (messageDateStr === yesterdayStr) {
-                    dateText = 'Yesterday';
-                } else {
-                    // For other dates, use a more readable format
-                    dateText = messageDate.toLocaleDateString([], {
-                        weekday: 'long',
-                        month: 'long', 
-                        day: 'numeric', 
-                        year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                    });
-                }
-                
-                dateHeader.textContent = dateText;
-                messagesContainer.appendChild(dateHeader);
-            }
-            
-            // Create the message element
-            const isIncoming = message.senderId !== currentUserId;
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${isIncoming ? 'received' : 'sent'}`;
-            messageElement.dataset.messageId = message.id;
-            
-            // Show only time for the message, not the full date
-            const timeStr = messageDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            messageElement.innerHTML = `
-                <div class="message-content">${message.content}</div>
-                <div class="message-time">${timeStr}</div>
-            `;
-            messagesContainer.appendChild(messageElement);
-        });
-        
-        // Force scroll to bottom after messages render
-        setTimeout(() => {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }, 50);
     }
 
     function sendChatMessage() {
@@ -256,7 +266,7 @@ export const initChat = () => {
         }
     }
 
-    // Expose functions to mark messages as unread and to reload users
+    // Expose functions for global use
     window.markMessageUnread = (senderId) => {
         if (currentChatUser === senderId) return false;
         unreadMessages[senderId] = true;
@@ -266,6 +276,7 @@ export const initChat = () => {
     };
 
     window.loadOnlineUsers = loadOnlineUsers;
+    window.showChatMessages = showChatMessages;
 };
 
 export const handleNewMessage = (senderId) => {
@@ -277,5 +288,14 @@ export const handleNewMessage = (senderId) => {
 export const refreshOnlineUsers = () => {
     if (typeof window.loadOnlineUsers === 'function') {
         window.loadOnlineUsers();
+    }
+};
+
+// Simplified external interface that uses the internal implementation
+export const showChatMessages = async (userId) => {
+    if (typeof window.showChatMessages === 'function') {
+        window.showChatMessages(userId);
+    } else {
+        console.error('Window.showChatMessages is not defined yet. The chat system may not be fully initialized.');
     }
 };

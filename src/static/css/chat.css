@@ -92,93 +92,67 @@
   background-color: #f9fafb;
 }
 
-/* Force the messages container to always show scrollbar */
+/* Clean up messages container */
 .messages-container {
   flex: 1;
-  overflow-y: scroll; /* Always show scrollbar */
-  padding: 16px 10px; /* Add more padding top/bottom */
+  overflow-y: auto; /* Changed from scroll to auto for better cross-browser behavior */
+  padding: 16px 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px; /* Increase gap between messages */
-  min-height: 0;
+  gap: 8px; /* Reduced from 12px */
+  height: 500px; /* Increase from 400px to ensure more messages are visible */
+  max-height: calc(100vh - 180px); /* Adapt to screen size */
   scrollbar-width: thin;
-  /* Add this to ensure content doesn't hug the scrollbar */
-  padding-right: 15px;
 }
 
-/* Add some extra spacing at the top and bottom of messages container */
-.messages-container::before,
-.messages-container::after {
-  content: "";
-  display: block;
-  height: 16px; /* Add space above first message and below last message */
-}
-
-/* Customize scrollbar for webkit browsers */
-.messages-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.messages-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.messages-container::-webkit-scrollbar-thumb {
-  background-color: #c1c1c1;
-  border-radius: 6px;
-}
-
-/* Make messages more compact */
+/* Simplify message styling */
 .message {
-  max-width: 80%;
-  padding: 10px 12px; /* Increase padding */
-  border-radius: 18px;
-  position: relative;
-  word-wrap: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  margin-bottom: 10px; /* Increase margin to take more vertical space */
+  max-width: 70%;
+  padding: 10px;
+  border-radius: 16px;
+  margin-bottom: 6px;
   font-size: 0.95rem;
-  min-height: 30px; /* Ensure minimum height for each message */
   display: flex;
   flex-direction: column;
+  align-self: flex-start;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .message.sent {
-  align-self: flex-end;
+  align-self: flex-end; /* This will keep sent messages right-aligned */
   background-color: var(--primary-color);
   color: white;
   border-bottom-right-radius: 4px;
 }
 
 .message.received {
-  align-self: flex-start;
   background-color: white;
   color: var(--text-color);
   border-bottom-left-radius: 4px;
   border: 1px solid var(--border-color);
 }
 
-/* Add a minimum height for the message content */
+/* Fix message content display */
 .message-content {
-  margin-bottom: 2px;
-  line-height: 2; /* Increase line height */
-  word-break: break-word; /* This will break words when needed */
+  max-height: 120px; /* Reduce from whatever it is currently */
+  overflow-y: auto; /* Allow scrolling within long messages */
+  margin-bottom: 4px;
+  line-height: 1.4;
   overflow-wrap: break-word;
-  white-space: pre-wrap; /* Keep whitespace but wrap text */
-  max-height: none; /* Don't limit height */
-  overflow: visible; /* Don't hide content */
-  min-height: 20px; /* Ensure each message content has minimum height */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Add WhatsApp-style date headers */
 .date-header {
   text-align: center;
-  padding: 6px 12px;
-  margin: 10px 0;
-  background-color: rgba(225, 245, 254, 0.5);
+  padding: 2px 8px;
+  margin: 4px 0;
+  background-color: rgba(0, 0, 0, 0.05);
   border-radius: 10px;
   font-size: 0.8rem;
-  color: #607d8b;
+  color: #666;
   width: fit-content;
   align-self: center;
   font-weight: 500;

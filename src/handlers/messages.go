@@ -75,16 +75,15 @@ func GetMessagesHandler(db *sql.DB) http.HandlerFunc {
 			json.NewEncoder(w).Encode(messages)
 			return
 		}
-
-		// Query messages with pagination
-		rows, err := db.Query(`
+// Query messages with pagination - ORDER BY created_at DESC to get newest first
+rows, err := db.Query(`
     SELECT id, sender_id, receiver_id, content, created_at, is_read 
     FROM messages 
     WHERE (sender_id = ? AND receiver_id = ?) 
        OR (sender_id = ? AND receiver_id = ?)
-    ORDER BY created_at ASC
-    LIMIT ?
-`, userId, otherUserId, otherUserId, userId, 100)
+    ORDER BY created_at DESC  
+    LIMIT ? OFFSET ?
+`, userId, otherUserId, otherUserId, userId, limit, offset)
 
 		if err != nil {
 			log.Printf("Database error fetching messages: %v", err)
